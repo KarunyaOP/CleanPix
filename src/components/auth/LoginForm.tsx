@@ -38,10 +38,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         const params = new URLSearchParams(window.location.search);
         const urlError = params.get("error");
         if (urlError) {
+          console.warn("[AUTH_LOGIN_ERROR_PARAM]", { error: urlError, fullQuery: window.location.search });
           if (urlError === "EmailSignin" || urlError === "EmailCreateAccount") {
             setErrorMessage("We couldn't send the magic link right now. Please check your email configuration or try again.");
-          } else if (urlError === "OAuthSignin" || urlError === "OAuthCallback" || urlError === "OAuthCreateAccount") {
-            setErrorMessage("Could not sign in with Google. Please try again.");
+          } else if (
+            urlError === "OAuthSignin" ||
+            urlError === "OAuthCallback" ||
+            urlError === "OAuthCreateAccount" ||
+            urlError === "Callback"
+          ) {
+            setErrorMessage("Google authentication could not be completed. Please try again.");
           } else if (urlError === "Configuration") {
             setErrorMessage("Authentication service configuration error. Please contact support.");
           } else if (urlError === "AccessDenied") {
@@ -56,19 +62,73 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     }
   }, []);
 
-  const getTargetCallbackUrl = () => {
+  /**
+   * Safely resolves and cleans the target callback URL.
+   * Completely prevents URL duplication (e.g. /https://..., https://domain/https://domain).
+   * Defaults to "/dashboard".
+   */
+  const getTargetCallbackUrl = (): string => {
     try {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const raw = params.get("callbackUrl") || params.get("redirect");
-        if (raw) {
-          if (raw === "pricing" || raw === "/pricing") return "/#pricing";
-          if (raw.startsWith("/")) return raw;
-          return `/${raw}`;
+
+        if (raw && typeof raw === "string") {
+          let trimmed = raw.trim();
+
+          // 1. If raw contains full URLs or duplicated URLs, parse out the clean internal path
+          while (trimmed.includes("http://") || trimmed.includes("https://")) {
+            const httpIdx = trimmed.indexOf("http://");
+            const httpsIdx = trimmed.indexOf("https://");
+            const earliestIdx =
+              httpIdx === -1 ? httpsIdx : httpsIdx === -1 ? httpIdx : Math.min(httpIdx, httpsIdx);
+
+            const urlSubstr = trimmed.slice(earliestIdx);
+            try {
+              const parsed = new URL(urlSubstr);
+              const internalPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+              if (internalPath.startsWith("/http://") || internalPath.startsWith("/https://")) {
+                trimmed = internalPath;
+              } else {
+                trimmed = internalPath || "/dashboard";
+                break;
+              }
+            } catch {
+              trimmed = urlSubstr.replace(/^https?:\/\/[^\/]+/, "") || "/dashboard";
+              break;
+            }
+          }
+
+          // 2. Map route shortcuts
+          if (trimmed === "pricing" || trimmed === "/pricing") {
+            const target = "/#pricing";
+            console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: target });
+            return target;
+          }
+
+          // 3. Ensure leading slash
+          if (!trimmed.startsWith("/")) {
+            trimmed = `/${trimmed}`;
+          }
+
+          // 4. Default home or empty redirect to /dashboard
+          if (trimmed === "/" || trimmed === "" || trimmed === "/login") {
+            const target = "/dashboard";
+            console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: target });
+            return target;
+          }
+
+          console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: trimmed });
+          return trimmed;
         }
       }
-    } catch {}
-    return guestHref || "/";
+    } catch (err) {
+      console.error("[AUTH_CALLBACK_URL_ERROR]", err);
+    }
+
+    const fallback = guestHref && guestHref !== "/" ? guestHref : "/dashboard";
+    console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw: null, resolved: fallback });
+    return fallback;
   };
 
   const handleGoogleSignIn = async () => {
@@ -76,8 +136,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setErrorMessage(null);
     try {
       const callbackUrl = getTargetCallbackUrl();
+      console.log("[SIGN_IN_GOOGLE_TRIGGERED]", { callbackUrl });
       await signIn("google", { callbackUrl });
     } catch (err: any) {
+      console.error("[SIGN_IN_GOOGLE_FAILED]", err);
       setErrorMessage("Could not sign in with Google. Please try again.");
       setIsGoogleLoading(false);
     }

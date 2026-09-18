@@ -87,6 +87,62 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      try {
+        console.log("[NEXTAUTH_REDIRECT_CALLBACK_INVOKED]", { url, baseUrl });
+
+        // 1. If relative URL
+        if (url.startsWith("/")) {
+          // Check for malformed /http or /https nested strings (e.g. /https://...)
+          if (url.startsWith("/http://") || url.startsWith("/https://")) {
+            const stripped = url.replace(/^\/https?:\/\/[^\/]+/, "") || "/dashboard";
+            const cleanPath = stripped.startsWith("/") ? stripped : `/${stripped}`;
+            const finalUrl = `${baseUrl}${cleanPath === "/" ? "/dashboard" : cleanPath}`;
+            console.log("[NEXTAUTH_REDIRECT_SANITIZED_RELATIVE]", { from: url, to: finalUrl });
+            return finalUrl;
+          }
+          if (url === "/" || url === "" || url === "/login") {
+            return `${baseUrl}/dashboard`;
+          }
+          return `${baseUrl}${url}`;
+        }
+
+        // 2. If absolute URL
+        const parsedUrl = new URL(url);
+        const parsedBase = new URL(baseUrl);
+
+        // Check if matching origin or cleanpix/vercel domain
+        if (
+          parsedUrl.origin === parsedBase.origin ||
+          parsedUrl.hostname.endsWith("vercel.app") ||
+          parsedUrl.hostname.endsWith("cleanpix.app") ||
+          parsedUrl.hostname === "localhost"
+        ) {
+          // Check if pathname contains nested /http...
+          if (
+            parsedUrl.pathname.startsWith("/http://") ||
+            parsedUrl.pathname.startsWith("/https://")
+          ) {
+            const stripped = parsedUrl.pathname.replace(/^\/https?:\/\/[^\/]+/, "") || "/dashboard";
+            const cleanPath = stripped.startsWith("/") ? stripped : `/${stripped}`;
+            const finalUrl = `${parsedBase.origin}${cleanPath === "/" ? "/dashboard" : cleanPath}${parsedUrl.search}${parsedUrl.hash}`;
+            console.log("[NEXTAUTH_REDIRECT_SANITIZED_ABSOLUTE]", { from: url, to: finalUrl });
+            return finalUrl;
+          }
+
+          if (parsedUrl.pathname === "/" || parsedUrl.pathname === "" || parsedUrl.pathname === "/login") {
+            return `${parsedBase.origin}/dashboard`;
+          }
+
+          return url;
+        }
+      } catch (err) {
+        console.error("[NEXTAUTH_REDIRECT_CALLBACK_ERROR]", { url, baseUrl, error: err });
+      }
+
+      // Safe fallback
+      return `${baseUrl}/dashboard`;
+    },
     async jwt({ token, user, account, trigger, session }) {
       if (user) {
         token.id = user.id;
