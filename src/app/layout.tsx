@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
 import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
+import { getMetadataBase, getSiteUrl } from "@/lib/siteUrl";
 
 export const viewport: Viewport = {
   themeColor: "#0A0B1E",
@@ -13,12 +14,48 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const siteUrl = getSiteUrl();
+
 export const metadata: Metadata = {
-  title: "CleanPix — AI-Powered Background Remover in Seconds",
+  metadataBase: getMetadataBase(),
+  title: {
+    default: "CleanPix — AI-Powered Background Remover in Seconds",
+    template: "%s | CleanPix",
+  },
   description:
     "Instantly remove backgrounds from images with AI precision. Smart background suggestions, auto-centering, and one-click social media exports.",
   manifest: "/manifest.json",
   applicationName: "CleanPix",
+  authors: [{ name: "CleanPix", url: siteUrl }],
+  creator: "CleanPix",
+  publisher: "CleanPix",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    siteName: "CleanPix",
+    title: "CleanPix — AI-Powered Background Remover in Seconds",
+    description:
+      "Instantly remove backgrounds from images with AI precision. Smart background suggestions, auto-centering, and one-click social media exports.",
+    images: [
+      {
+        url: "/branding/favicon/favicon-512x512.png",
+        width: 512,
+        height: 512,
+        alt: "CleanPix AI Background Remover",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "CleanPix — AI-Powered Background Remover in Seconds",
+    description:
+      "Instantly remove backgrounds from images with AI precision. Smart background suggestions, auto-centering, and one-click social media exports.",
+    images: ["/branding/favicon/favicon-512x512.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
