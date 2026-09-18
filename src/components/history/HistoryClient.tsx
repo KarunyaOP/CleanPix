@@ -1,0 +1,827 @@
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import {
+  History,
+  RefreshCw,
+  Clock,
+  Download,
+  Copy,
+  Trash2,
+  Check,
+  ArrowLeft,
+  Sparkles,
+  UploadCloud,
+  ImageIcon,
+  AlertTriangle,
+  X,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Layers,
+} from "lucide-react";
+import { DetectedCategory } from "@/types/schema";
+
+export interface ProjectRecord {
+  id: string;
+  originalUrl: string;
+  processedUrl: string | null;
+  detectedObject: string | null;
+  status: string;
+  createdAt: string;
+  exports?: Array<{
+    id: string;
+    format: string;
+    url: string;
+  }>;
+}
+
+export interface HistoryClientProps {
+  initialProjects: ProjectRecord[];
+  initialUser?: {
+    name?: string | null;
+    email?: string | null;
+    plan?: string | null;
+    credits?: number | null;
+  } | null;
+}
+
+const CATEGORY_TABS: Array<{ id: string; label: string }> = [
+  { id: "all", label: "All Cutouts" },
+  { id: "person", label: "Person" },
+  { id: "product", label: "Product" },
+  { id: "food", label: "Food" },
+  { id: "document", label: "Document" },
+  { id: "logo", label: "Logo" },
+  { id: "pet", label: "Pet" },
+  { id: "vehicle", label: "Vehicle" },
+  { id: "screenshot", label: "Screenshot" },
+  { id: "illustration", label: "Illustration" },
+  { id: "other", label: "Other" },
+];
+
+export const HistoryClient: React.FC<HistoryClientProps> = ({
+  initialProjects,
+  initialUser,
+}) => {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [projects, setProjects] = useState<ProjectRecord[]>(initialProjects);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState<boolean>(false);
+  const [isDeletingAll, setIsDeletingAll] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [livePlan, setLivePlan] = useState<string>(
+    (session?.user as any)?.plan || initialUser?.plan || "free"
+  );
+  const [liveCredits, setLiveCredits] = useState<number>(
+    (session?.user as any)?.credits ?? initialUser?.credits ?? 10
+  );
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Synchronize state when server re-renders (e.g. after router.refresh())
+  useEffect(() => {
+    setProjects(initialProjects);
+  }, [initialProjects]);
+
+  /**
+   * Manual Re-fetch from API
+   */
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.projects)) {
+          setProjects(data.projects);
+          showToast("History refreshed from database.");
+          router.refresh();
+          return;
+        }
+      }
+
+      // Guest fallback
+      const localData = localStorage.getItem("cleanpix_cutout_history");
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          if (Array.isArray(parsed)) {
+            const mapped: ProjectRecord[] = parsed.map((item: any) => ({
+              id: item.id || `local-${Math.random()}`,
+              originalUrl: item.originalUrl || item.cutoutUrl || "/images/hero-original.jpg",
+              processedUrl: item.cutoutUrl || item.processedUrl || "/images/hero-cutout.jpg",
+              detectedObject: item.category?.toLowerCase() || "cutout",
+              status: "done",
+              createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
+            }));
+            setProjects(mapped);
+            showToast("History is up to date.");
+            return;
+          }
+        } catch {}
+      }
+
+      showToast("History is up to date.");
+    } catch (err) {
+      console.error("[REFRESH_ERROR]", err);
+      showToast("Could not refresh history.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Real-time synchronization event listeners across tabs/components
+  useEffect(() => {
+    const handleProjectCreated = (e: any) => {
+      const newProj = e.detail;
+      if (newProj && newProj.id) {
+        setProjects((prev) => {
+          if (prev.some((p) => p.id === newProj.id)) return prev;
+          return [newProj, ...prev];
+        });
+        showToast("New cutout added to history.");
+      }
+    };
+
+    const handleProjectDeleted = (e: any) => {
+      const deletedId = e.detail?.id;
+      if (deletedId) {
+        setProjects((prev) => prev.filter((p) => p.id !== deletedId));
+      }
+    };
+
+    const handleAllDeleted = () => {
+      setProjects([]);
+    };
+
+    const handlePlanUpdated = (e: any) => {
+      if (e.detail?.plan) {
+        setLivePlan(e.detail.plan);
+      }
+    };
+
+    const handleCreditsUpdated = (e: any) => {
+      if (typeof e.detail?.credits === "number") {
+        setLiveCredits(e.detail.credits);
+      }
+    };
+
+    window.addEventListener("cleanpix_project_created", handleProjectCreated);
+    window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
+    window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
+    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+
+    return () => {
+      window.removeEventListener("cleanpix_project_created", handleProjectCreated);
+      window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
+      window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
+      window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
+      window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+    };
+  }, []);
+
+  /**
+   * Delete single project
+   */
+  const handleDelete = async (id: string) => {
+    setDeleteLoadingId(id);
+
+    // 1. Optimistic UI update
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+
+    // 2. Broadcast single deletion event
+    window.dispatchEvent(
+      new CustomEvent("cleanpix_project_deleted", { detail: { id } })
+    );
+
+    // 3. Update localStorage
+    try {
+      const localData = localStorage.getItem("cleanpix_cutout_history");
+      if (localData) {
+        const parsed = JSON.parse(localData);
+        const filtered = parsed.filter((item: any) => item.id !== id);
+        localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+      }
+    } catch {}
+
+    // 4. Send API request
+    try {
+      await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      showToast("Project deleted from database.");
+      router.refresh();
+    } catch (err) {
+      console.error("[DELETE_ERROR]", err);
+    } finally {
+      setDeleteLoadingId(null);
+    }
+  };
+
+  /**
+   * Delete All History records
+   */
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+
+    // 1. Optimistically clear
+    setProjects([]);
+
+    // 2. Broadcast event
+    window.dispatchEvent(new CustomEvent("cleanpix_project_all_deleted"));
+
+    // 3. Clear localStorage
+    try {
+      localStorage.removeItem("cleanpix_cutout_history");
+    } catch {}
+
+    // 4. API request
+    try {
+      const res = await fetch("/api/projects?all=true", {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        showToast("All processing history deleted permanently.");
+      }
+      router.refresh();
+    } catch (err) {
+      console.error("[DELETE_ALL_ERROR]", err);
+      showToast("Failed to delete all history.");
+    } finally {
+      setIsDeletingAll(false);
+      setIsDeleteAllOpen(false);
+    }
+  };
+
+  /**
+   * Copy transparent PNG to clipboard
+   */
+  const handleCopy = async (id: string, url: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+      setCopiedId(id);
+      showToast("Cutout copied to clipboard!");
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      showToast("Link copied to clipboard!");
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  /**
+   * Download Cutout
+   */
+  const handleDownload = (url: string, id: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cleanpix_cutout_${id.slice(0, 8)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Download started.");
+  };
+
+  const formatTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    } catch {
+      return "Recent";
+    }
+  };
+
+  // Filtered projects based on search query & category tab
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      // Category filter
+      if (selectedCategory !== "all") {
+        const cat = (project.detectedObject || "other").toLowerCase();
+        if (cat !== selectedCategory.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // Search query filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const originalName = project.originalUrl.split("/").pop()?.toLowerCase() || "";
+        const id = project.id.toLowerCase();
+        const cat = (project.detectedObject || "").toLowerCase();
+        if (!originalName.includes(query) && !id.includes(query) && !cat.includes(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [projects, selectedCategory, searchQuery]);
+
+  // Pagination calculation
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(filteredProjects.length / itemsPerPage);
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
+
+  const paginatedProjects = useMemo(() => {
+    if (itemsPerPage === -1) return filteredProjects;
+    const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+    return filteredProjects.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredProjects, safeCurrentPage, itemsPerPage]);
+
+  const userPlan = livePlan || (session?.user as any)?.plan || initialUser?.plan || "free";
+  const userCredits = liveCredits ?? (session?.user as any)?.credits ?? initialUser?.credits ?? 10;
+  const userName = session?.user?.name || initialUser?.name || session?.user?.email?.split("@")[0] || initialUser?.email?.split("@")[0] || "User";
+
+  return (
+    <main className="min-h-screen bg-[#0A0B1E] text-[#F8FAFC] flex flex-col selection:bg-primary/40 selection:text-white">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-[14px] bg-[#131A3A]/95 border border-primary/50 text-xs font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.6),0_0_20px_rgba(34,211,238,0.3)] animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-center gap-2">
+          <Sparkles size={13} className="text-accent" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Delete All Confirmation Modal */}
+      {isDeleteAllOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05060F]/85 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => !isDeletingAll && setIsDeleteAllOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative w-full max-w-[460px] rounded-[24px] bg-[#131A3A] border border-red-500/30 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_30px_rgba(239,68,68,0.2)] flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-heading font-bold text-lg text-white">
+                  Delete all history?
+                </h3>
+                <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                  This will permanently remove all {projects.length} processed images and history records from the database. This action cannot be undone.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllOpen(false)}
+                disabled={isDeletingAll}
+                className="p-1 text-text-muted hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllOpen(false)}
+                disabled={isDeletingAll}
+                className="px-4 py-2 rounded-btn text-xs font-semibold text-text-secondary hover:text-white bg-white/[0.05] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isDeletingAll}
+                className="px-4 py-2 rounded-btn text-xs font-heading font-bold text-white bg-red-500 hover:bg-red-600 shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeletingAll ? (
+                  <span>Deleting All...</span>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Delete All</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header Bar */}
+      <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#0A0B1E]/85 backdrop-blur-2xl">
+        <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between">
+          {/* Brand and Single Clear Back Navigation */}
+          <div className="flex items-center gap-6">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-white transition-colors group"
+            >
+              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+              <span>Back to Editor</span>
+            </Link>
+
+            <div className="h-5 w-px bg-white/10 hidden sm:block" />
+
+            <Link href="/" className="flex items-center gap-3">
+              <img
+                src="/branding/logo/cleanpix-icon.svg"
+                alt="CleanPix Icon"
+                className="w-8 h-8 object-contain drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]"
+              />
+              <span className="font-heading font-bold text-xl text-white tracking-tight hidden sm:inline">
+                Clean<span className="bg-gradient-to-r from-[#38BDF8] via-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Pix</span>
+              </span>
+            </Link>
+          </div>
+
+          {/* Right Header Actions: Refresh & Delete All */}
+          <div className="flex items-center gap-3">
+            {/* REFRESH BUTTON */}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-btn font-heading font-semibold text-xs text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/18 hover:border-primary/50 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              title="Re-fetch latest project records from the database"
+            >
+              <RefreshCw
+                size={13}
+                className={`text-accent ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+            </button>
+
+            {/* DELETE ALL ACTION BUTTON */}
+            {projects.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-btn text-xs font-semibold text-red-300 hover:text-white bg-red-500/10 hover:bg-red-500/25 border border-red-500/25 hover:border-red-500/40 transition-all cursor-pointer shadow-sm"
+                title="Permanently remove all your history records"
+              >
+                <Trash2 size={13} />
+                <span>Delete All</span>
+              </button>
+            )}
+
+            {/* Account / User Pill */}
+            {(session?.user || initialUser) && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-[#131A3A] border border-primary/30">
+                <span className="text-xs font-semibold text-white truncate max-w-[140px]">
+                  {userName}
+                </span>
+                <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${
+                  userPlan.toLowerCase() === "pro"
+                    ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                    : userPlan.toLowerCase() === "business"
+                    ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                    : "bg-primary/25 border-primary/40 text-accent"
+                }`}>
+                  {userPlan.toLowerCase() === "pro"
+                    ? "Pro"
+                    : userPlan.toLowerCase() === "business"
+                    ? "Business"
+                    : "Free"}
+                </span>
+                {["pro", "business", "enterprise"].includes(userPlan.toLowerCase()) ? (
+                  <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent">
+                    Unlimited
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent">
+                    {userCredits} credits
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 py-10 flex-1 flex flex-col">
+        {/* Page Title Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(34,211,238,0.4)]">
+                <History size={15} className="text-accent" />
+              </div>
+              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-white tracking-tight">
+                Processing History
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-pill bg-white/[0.06] border border-white/10 text-xs font-mono font-semibold text-accent">
+                {projects.length} {projects.length === 1 ? "cutout" : "cutouts"}
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-text-secondary">
+              Review, copy, or download your complete AI background removal history.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-btn text-xs font-semibold text-text-secondary hover:text-white bg-[#131A3A] border border-white/15 hover:border-white/30 transition-all cursor-pointer"
+            >
+              <Layers size={14} />
+              <span>Dashboard</span>
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn font-heading font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-primary to-secondary shadow-[0_0_20px_rgba(79,124,255,0.5)] hover:shadow-[0_0_30px_rgba(79,124,255,0.75)] hover:-translate-y-0.5 transition-all cursor-pointer"
+            >
+              <UploadCloud size={16} />
+              <span>New Upload</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Filter & Search Toolbar */}
+        {projects.length > 0 && (
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6 p-4 rounded-[20px] bg-[#131A3A]/70 border border-white/10 backdrop-blur-xl">
+            {/* Category Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+              {CATEGORY_TABS.map((tab) => {
+                const isSelected = selectedCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(tab.id);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-pill text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+                      isSelected
+                        ? "bg-primary text-white border border-accent shadow-[0_0_12px_rgba(79,124,255,0.5)]"
+                        : "bg-white/[0.04] text-text-secondary hover:text-white hover:bg-white/10 border border-white/10"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Search Input & Page Size Select */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 sm:w-64">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search cutouts..."
+                  className="w-full pl-9 pr-3 py-1.5 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-white placeholder:text-text-muted focus:outline-none focus:border-accent"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Page Size Selector */}
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(parseInt(e.target.value, 10));
+                  setCurrentPage(1);
+                }}
+                className="px-2.5 py-1.5 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-text-secondary focus:outline-none focus:border-accent cursor-pointer"
+              >
+                <option value={12}>12 / page</option>
+                <option value={24}>24 / page</option>
+                <option value={48}>48 / page</option>
+                <option value={-1}>Show All</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* History Cards Grid */}
+        {filteredProjects.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+              {paginatedProjects.map((project) => (
+                <div
+                  key={project.id}
+                  className="group relative rounded-[24px] bg-[#131A3A]/80 hover:bg-[#131A3A] border border-white/12 hover:border-primary/50 p-4 flex flex-col justify-between gap-4 transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:shadow-[0_12px_40px_rgba(79,124,255,0.25)] hover:-translate-y-1"
+                >
+                  {/* Visual Checkerboard Preview Stage */}
+                  <div className="relative aspect-square w-full rounded-[18px] checkerboard-pattern border border-white/15 overflow-hidden flex items-center justify-center p-3 shadow-inner">
+                    <img
+                      src={project.processedUrl || project.originalUrl}
+                      alt="Processed Cutout"
+                      className="w-full h-full object-contain filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] group-hover:scale-105 transition-transform duration-200"
+                    />
+
+                    {/* Category Pill Tag */}
+                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-pill bg-[#0A0B1E]/85 backdrop-blur-md border border-white/15 text-[10px] font-bold text-accent uppercase tracking-wider">
+                      {project.detectedObject || "Cutout"}
+                    </span>
+
+                    {/* Timestamp Tag */}
+                    <span className="absolute bottom-3 left-3 px-2.5 py-0.5 rounded-pill bg-[#0A0B1E]/85 backdrop-blur-md border border-white/15 text-[10px] font-mono font-medium text-text-muted flex items-center gap-1">
+                      <Clock size={10} />
+                      {formatTime(project.createdAt)}
+                    </span>
+                  </div>
+
+                  {/* Card Actions Row */}
+                  <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2">
+                    {/* Copy Button */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopy(project.id, project.processedUrl || project.originalUrl)
+                      }
+                      className="flex-1 py-2 px-3 rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-xs font-semibold text-[#F8FAFC] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      {copiedId === project.id ? (
+                        <>
+                          <Check size={13} className="text-status-success" />
+                          <span className="text-status-success">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={13} />
+                          <span>Copy PNG</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Download Button */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDownload(
+                          project.processedUrl || project.originalUrl,
+                          project.id
+                        )
+                      }
+                      className="flex-1 py-2 px-3 rounded-[10px] bg-primary/20 hover:bg-primary/35 border border-primary/40 text-xs font-bold text-accent transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Download size={13} />
+                      <span>Download</span>
+                    </button>
+
+                    {/* Delete Single Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(project.id)}
+                      disabled={deleteLoadingId === project.id}
+                      className="p-2 rounded-[10px] text-text-muted hover:text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Delete project from history"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Controls (when more than 1 page) */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-white/10 pt-6 mt-auto">
+                <div className="text-xs text-text-secondary font-mono">
+                  Showing {(safeCurrentPage - 1) * itemsPerPage + 1}–{Math.min(safeCurrentPage * itemsPerPage, filteredProjects.length)} of {filteredProjects.length} cutouts
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage <= 1}
+                    className="p-2 rounded-btn bg-[#131A3A] border border-white/15 text-text-secondary hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+
+                  <div className="flex items-center gap-1 text-xs">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pg) => {
+                      if (
+                        pg === 1 ||
+                        pg === totalPages ||
+                        (pg >= safeCurrentPage - 1 && pg <= safeCurrentPage + 1)
+                      ) {
+                        return (
+                          <button
+                            key={pg}
+                            type="button"
+                            onClick={() => setCurrentPage(pg)}
+                            className={`w-8 h-8 rounded-btn text-xs font-semibold transition-all cursor-pointer ${
+                              safeCurrentPage === pg
+                                ? "bg-primary text-white border border-accent shadow-sm"
+                                : "bg-[#131A3A] text-text-secondary hover:text-white border border-white/10"
+                            }`}
+                          >
+                            {pg}
+                          </button>
+                        );
+                      }
+                      if (pg === safeCurrentPage - 2 || pg === safeCurrentPage + 2) {
+                        return <span key={pg} className="px-1 text-text-muted">...</span>;
+                      }
+                      return null;
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage >= totalPages}
+                    className="p-2 rounded-btn bg-[#131A3A] border border-white/15 text-text-secondary hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : projects.length > 0 ? (
+          /* Search / Filter Empty State */
+          <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-14 h-14 rounded-full bg-[#131A3A] border border-white/15 flex items-center justify-center text-text-muted mb-3">
+              <Search size={24} />
+            </div>
+            <h3 className="font-heading font-bold text-lg text-white mb-1">
+              No matching cutouts
+            </h3>
+            <p className="text-xs text-text-secondary max-w-sm mb-4">
+              No history records matched your search or category filter.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedCategory("all");
+              }}
+              className="px-4 py-2 rounded-btn text-xs font-semibold text-accent bg-primary/20 border border-primary/35 hover:bg-primary/30 transition-all cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        ) : (
+          /* Total Empty State */
+          <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#131A3A] border border-primary/30 flex items-center justify-center text-accent mb-4 shadow-[0_0_24px_rgba(79,124,255,0.3)]">
+              <ImageIcon size={30} />
+            </div>
+            <h3 className="font-heading font-bold text-xl text-white mb-2">
+              No processing history yet
+            </h3>
+            <p className="text-xs sm:text-sm text-text-secondary max-w-sm mb-6">
+              Your completed background removals will appear here automatically.
+            </p>
+            <Link
+              href="/"
+              className="px-6 py-3 rounded-btn font-heading font-bold text-sm text-white bg-gradient-to-r from-primary to-secondary shadow-[0_0_24px_rgba(79,124,255,0.6)] hover:shadow-[0_0_36px_rgba(79,124,255,0.85)] hover:-translate-y-0.5 transition-all cursor-pointer"
+            >
+              Upload Image
+            </Link>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+};

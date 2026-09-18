@@ -1,0 +1,64 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="favChecker" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#1E2442"/>
+      <rect x="4" width="4" height="4" fill="#0F1328"/>
+      <rect y="4" width="4" height="4" fill="#0F1328"/>
+      <rect x="4" y="4" width="4" height="4" fill="#1E2442"/>
+    </pattern>
+
+    <linearGradient id="favGrad" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="40%" stop-color="#38BDF8"/>
+      <stop offset="70%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#D946EF"/>
+    </linearGradient>
+
+    <clipPath id="favDisc">
+      <circle cx="30" cy="32" r="14"/>
+    </clipPath>
+  </defs>
+
+  <!-- Ambient Dark Container Rounded Squircle -->
+  <rect width="64" height="64" rx="16" fill="#0A0B1E"/>
+  <rect width="64" height="64" rx="16" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+
+  <!-- Inner Checkerboard Disc -->
+  <g clip-path="url(#favDisc)">
+    <rect x="16" y="18" width="28" height="28" fill="url(#favChecker)"/>
+    <circle cx="30" cy="32" r="14" stroke="#38BDF8" stroke-width="1.2" stroke-opacity="0.5" fill="none"/>
+  </g>
+
+  <!-- High-Contrast Glass "C" Shape -->
+  <path d="M 44 18
+           C 36 11, 24 11, 16 19
+           C 8 27, 8 37, 16 45
+           C 24 53, 36 53, 44 45
+           C 47 42, 45 38, 41 38
+           C 35 38, 33 42, 27 42
+           C 20 42, 16 37, 17 32
+           C 18 26, 23 22, 29 22
+           C 34 22, 38 25, 41 25
+           C 45 25, 47 22, 44 18 Z"
+        fill="url(#favGrad)"
+        fill-opacity="0.35"
+        stroke="url(#favGrad)"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Top White Specular Arc -->
+  <path d="M 43 19 C 36 12, 25 12, 17 20 C 9 28, 9 36, 17 44"
+        stroke="#FFFFFF"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-opacity="0.95"
+        fill="none"/>
+
+  <!-- AI Diamond Star -->
+  <g transform="translate(50, 30)">
+    <path d="M 0 -10 C 0.4 -3, 3 -0.4, 10 0 C 3 0.4, 0.4 3, 0 10 C -0.4 3, -3 0.4, -10 0 C -3 -0.4, -0.4 -3, 0 -10 Z"
+          fill="#00F0FF"/>
+    <circle cx="0" cy="0" r="2" fill="#FFFFFF"/>
+  </g>
+</svg>

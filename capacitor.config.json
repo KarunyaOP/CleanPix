@@ -1,0 +1,25 @@
+{
+  "appId": "app.cleanpix.mobile",
+  "appName": "CleanPix",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://cleanpix.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "backgroundColor": "#0A0B1E",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}
