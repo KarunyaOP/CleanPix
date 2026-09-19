@@ -108,18 +108,18 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-20 pointer-events-none" />
 
           {/* Top Bar with Dynamic "After" or "After (HD Enhanced)" Label */}
-          <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
+          <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between gap-3 sm:gap-4">
             <div
-              className={`inline-flex items-center rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)] shrink-0 ${
-                isHd ? "gap-1 px-2.5 py-1" : "gap-1.5 px-3 py-1"
+              className={`inline-flex items-center justify-center rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)] shrink-0 ${
+                isHd ? "gap-1 px-2 py-1" : "gap-1.5 px-3 py-1"
               }`}
             >
               <Sparkles size={11} className="text-accent shrink-0" />
-              <span>{isHd ? "After (HD Enhanced)" : "After"}</span>
+              <span className="whitespace-nowrap">{isHd ? "After (HD Enhanced)" : "After"}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-              <span className="text-[11px] font-bold text-white">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse shrink-0" />
+              <span className="text-[11px] font-bold text-white whitespace-nowrap">
                 {activePreset.id === "transparent"
                   ? "Alpha PNG"
                   : activePreset.name}
