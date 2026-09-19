@@ -200,32 +200,42 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   };
 
   const handleDeleteItem = async (id: string) => {
-    // 1. Optimistic removal
-    setHistoryItems((prev) => prev.filter((item) => item.id !== id));
-
-    // 2. Dispatch event
-    window.dispatchEvent(
-      new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-    );
-
-    // 3. Clear localStorage
     try {
-      const stored = localStorage.getItem("cleanpix_cutout_history");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const filtered = parsed.filter((item: any) => item.id !== id);
-        localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-      }
-    } catch {}
-
-    // 4. Delete from Supabase
-    try {
-      await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+      const emailQuery = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
+      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
         method: "DELETE",
+        headers: {
+          ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+        },
       });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || "Failed to delete cutout from database.");
+      }
+
+      // 1. Confirmed deletion: update UI
+      setHistoryItems((prev) => prev.filter((item) => item.id !== id));
+
+      // 2. Dispatch event to notify HistoryClient and Dashboard
+      window.dispatchEvent(
+        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
+      );
+
+      // 3. Clear from localStorage
+      try {
+        const stored = localStorage.getItem("cleanpix_cutout_history");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const filtered = parsed.filter((item: any) => item.id !== id);
+          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+        }
+      } catch {}
+
       showToast("Cutout deleted.");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[DELETE_ITEM_ERROR]", err);
+      showToast(err.message || "Failed to delete cutout.");
     }
   };
 

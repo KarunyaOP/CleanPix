@@ -80,15 +80,15 @@ export class CloudinaryService {
       const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
       const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
 
-      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge preservation
+      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge and color space preservation
       // Fit (0%): tight framing with fine edges
       // Balanced (50%): 25% extra canvas with b_transparent,c_pad
       // Spacious (100%): 50% extra canvas with b_transparent,c_pad
       const standardTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_100"
         : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
-        : "e_background_removal:fineedges_y";
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_100"
+        : "e_background_removal:fineedges_y/cs_srgb,q_100";
 
       const processedUrl = cloudinary.url(uploadResult.public_id, {
         raw_transformation: standardTransformation,
@@ -97,12 +97,13 @@ export class CloudinaryService {
         version: uploadResult.version,
       });
 
-      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL (Fine Edges + 2x DPR + AI Sharpening + Improvement + Lossless Best Quality)
+      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL:
+      // Preserves original contrast and color vibrancy via cs_srgb + 2x DPR resolution + clean unsharp mask (e_unsharp_mask:120) + lossless 100% PNG quality
       const hdTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
         : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
-        : "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best";
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
+        : "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100";
 
       const hdUrl = cloudinary.url(uploadResult.public_id, {
         raw_transformation: hdTransformation,

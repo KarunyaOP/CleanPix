@@ -430,18 +430,18 @@ export function useUpload() {
     setIsEnhancingHd(true);
     setHdError(null);
 
-    // Derive HD URL if not already set (Fine Edges + 2x DPR + AI Sharpening + AI Improvement + Lossless Best Quality)
+    // Derive HD URL if not already set (Fine Edges + 2x DPR + Crisp Unsharp Mask + sRGB Color Space + Lossless 100% PNG)
     let targetHdUrl = hdUrl;
     if (!targetHdUrl && processedUrl) {
       if (processedUrl.includes("e_background_removal:fineedges_y")) {
         targetHdUrl = processedUrl.replace(
           "e_background_removal:fineedges_y",
-          "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+          "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
         );
       } else if (processedUrl.includes("e_background_removal")) {
         targetHdUrl = processedUrl.replace(
           "e_background_removal",
-          "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+          "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
         );
       } else {
         targetHdUrl = processedUrl;
@@ -514,7 +514,15 @@ export function useUpload() {
   const downloadCutout = useCallback(
     async (quality: "standard" | "hd" = "standard") => {
       const isHd = quality === "hd";
-      const targetUrl = isHd ? (hdUrl || (processedUrl ? processedUrl.replace(/e_background_removal(:fineedges_y)?/, "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best") : null)) : processedUrl;
+      const targetUrl = isHd
+        ? hdUrl ||
+          (processedUrl
+            ? processedUrl.replace(
+                /e_background_removal(:fineedges_y)?/,
+                "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
+              )
+            : null)
+        : processedUrl;
       if (!targetUrl) return;
 
       const baseName = file ? file.name.replace(/\.[^/.]+$/, "") : "cleanpix";
@@ -541,7 +549,7 @@ export function useUpload() {
         // Continue to Stage 2
       }
 
-      // Stage 2: Offscreen Canvas Draw
+      // Stage 2: Offscreen Canvas Draw with full sRGB color space & high smoothing quality
       try {
         const img = new Image();
         img.crossOrigin = "anonymous";
@@ -554,8 +562,10 @@ export function useUpload() {
         const canvas = document.createElement("canvas");
         canvas.width = img.naturalWidth || img.width;
         canvas.height = img.naturalHeight || img.height;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { colorSpace: "srgb" });
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, 0, 0);
           const blob = await new Promise<Blob | null>((resolve) =>
             canvas.toBlob(resolve, "image/png")

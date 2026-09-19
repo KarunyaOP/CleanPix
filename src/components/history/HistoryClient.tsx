@@ -224,33 +224,43 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const handleDelete = async (id: string) => {
     setDeleteLoadingId(id);
 
-    // 1. Optimistic UI update
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-
-    // 2. Broadcast single deletion event
-    window.dispatchEvent(
-      new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-    );
-
-    // 3. Update localStorage
     try {
-      const localData = localStorage.getItem("cleanpix_cutout_history");
-      if (localData) {
-        const parsed = JSON.parse(localData);
-        const filtered = parsed.filter((item: any) => item.id !== id);
-        localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-      }
-    } catch {}
-
-    // 4. Send API request
-    try {
-      await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+      const emailQuery = userEmail ? `&userEmail=${encodeURIComponent(userEmail)}` : "";
+      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
         method: "DELETE",
+        headers: {
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+        },
       });
-      showToast("Project deleted from database.");
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || "Failed to delete cutout from database.");
+      }
+
+      // 1. Confirmed deletion: update UI state
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+
+      // 2. Broadcast single deletion event to Dashboard and HistoryModal
+      window.dispatchEvent(
+        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
+      );
+
+      // 3. Update localStorage
+      try {
+        const localData = localStorage.getItem("cleanpix_cutout_history");
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          const filtered = parsed.filter((item: any) => item.id !== id);
+          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+        }
+      } catch {}
+
+      showToast("Cutout deleted from database.");
       router.refresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
+      showToast(err.message || "Failed to delete cutout. Please try again.");
     } finally {
       setDeleteLoadingId(null);
     }
@@ -262,29 +272,36 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const handleDeleteAll = async () => {
     setIsDeletingAll(true);
 
-    // 1. Optimistically clear
-    setProjects([]);
-
-    // 2. Broadcast event
-    window.dispatchEvent(new CustomEvent("cleanpix_project_all_deleted"));
-
-    // 3. Clear localStorage
     try {
-      localStorage.removeItem("cleanpix_cutout_history");
-    } catch {}
-
-    // 4. API request
-    try {
-      const res = await fetch("/api/projects?all=true", {
+      const emailQuery = userEmail ? `&userEmail=${encodeURIComponent(userEmail)}` : "";
+      const res = await fetch(`/api/projects?all=true${emailQuery}`, {
         method: "DELETE",
+        headers: {
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+        },
       });
-      if (res.ok) {
-        showToast("All processing history deleted permanently.");
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || "Failed to delete all history from database.");
       }
+
+      // 1. Confirmed deletion: clear state
+      setProjects([]);
+
+      // 2. Broadcast event across tabs/components
+      window.dispatchEvent(new CustomEvent("cleanpix_project_all_deleted"));
+
+      // 3. Clear localStorage
+      try {
+        localStorage.removeItem("cleanpix_cutout_history");
+      } catch {}
+
+      showToast("All processing history deleted permanently.");
       router.refresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[DELETE_ALL_ERROR]", err);
-      showToast("Failed to delete all history.");
+      showToast(err.message || "Failed to delete all history.");
     } finally {
       setIsDeletingAll(false);
       setIsDeleteAllOpen(false);

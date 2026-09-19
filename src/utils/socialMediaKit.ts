@@ -184,7 +184,7 @@ export async function renderSocialFormatCanvas(
   const canvas = document.createElement("canvas");
   canvas.width = format.width;
   canvas.height = format.height;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { colorSpace: "srgb" });
   if (!ctx) throw new Error("Could not create 2D canvas context.");
 
   // 1. Draw Background

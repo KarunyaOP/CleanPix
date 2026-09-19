@@ -188,8 +188,11 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getAuthSession();
+    const { searchParams } = new URL(request.url);
+    const queryEmail = searchParams.get("userEmail") || request.headers.get("x-user-email");
+    const effectiveEmail = queryEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!session?.user?.email) {
+    if (!effectiveEmail) {
       return NextResponse.json(
         {
           error: {
@@ -202,7 +205,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: effectiveEmail },
     });
 
     if (!user) {
@@ -217,7 +220,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const all = searchParams.get("all");
 
@@ -256,6 +258,18 @@ export async function DELETE(request: NextRequest) {
       },
     });
 
+    if (deleteResult.count === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "NOT_FOUND",
+            message: "Project record not found or does not belong to this account.",
+          },
+        },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       deletedCount: deleteResult.count,
@@ -267,7 +281,7 @@ export async function DELETE(request: NextRequest) {
       {
         error: {
           code: "DATABASE_ERROR",
-          message: "Failed to delete project record.",
+          message: "Failed to delete project record from database.",
           details: error.message,
         },
       },

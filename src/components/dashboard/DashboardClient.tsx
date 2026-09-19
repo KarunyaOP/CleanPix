@@ -211,12 +211,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       const deletedId = e.detail?.id;
       if (deletedId) {
         setRecentProjects((prev) => prev.filter((p) => p.id !== deletedId));
-        setStats((prev) => ({
-          ...prev,
-          totalProjects: Math.max(0, prev.totalProjects - 1),
-          totalProcessed: Math.max(0, prev.totalProcessed - 1),
-        }));
       }
+      fetchFreshData();
     };
 
     const handleAllDeleted = () => {
@@ -226,6 +222,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         totalProjects: 0,
         totalProcessed: 0,
       }));
+      fetchFreshData();
     };
 
     const handleCreditsUpdated = (e: any) => {
@@ -266,30 +263,46 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const handleDeleteProject = async (id: string) => {
     setDeleteLoadingId(id);
 
-    // 1. Broadcast event
-    window.dispatchEvent(
-      new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-    );
-
-    // 2. Clear from localStorage
     try {
-      const localData = localStorage.getItem("cleanpix_cutout_history");
-      if (localData) {
-        const parsed = JSON.parse(localData);
-        const filtered = parsed.filter((item: any) => item.id !== id);
-        localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-      }
-    } catch {}
-
-    // 3. Send API request
-    try {
-      await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+      const emailQuery = user.email ? `&userEmail=${encodeURIComponent(user.email)}` : "";
+      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
         method: "DELETE",
+        headers: {
+          ...(user.email ? { "x-user-email": user.email } : {}),
+        },
       });
-      showToast("Project deleted.");
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || "Failed to delete project from database.");
+      }
+
+      // 1. Update local state
+      setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+
+      // 2. Broadcast event to History views
+      window.dispatchEvent(
+        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
+      );
+
+      // 3. Clear from localStorage
+      try {
+        const localData = localStorage.getItem("cleanpix_cutout_history");
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          const filtered = parsed.filter((item: any) => item.id !== id);
+          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+        }
+      } catch {}
+
+      // 4. Fetch fresh stats directly from Supabase
+      await fetchFreshData();
+
+      showToast("Project deleted from database.");
       router.refresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
+      showToast(err.message || "Failed to delete project.");
     } finally {
       setDeleteLoadingId(null);
     }
