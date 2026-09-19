@@ -50,20 +50,6 @@ export interface HistoryClientProps {
   } | null;
 }
 
-const CATEGORY_TABS: Array<{ id: string; label: string }> = [
-  { id: "all", label: "All Cutouts" },
-  { id: "person", label: "Person" },
-  { id: "product", label: "Product" },
-  { id: "food", label: "Food" },
-  { id: "document", label: "Document" },
-  { id: "logo", label: "Logo" },
-  { id: "pet", label: "Pet" },
-  { id: "vehicle", label: "Vehicle" },
-  { id: "screenshot", label: "Screenshot" },
-  { id: "illustration", label: "Illustration" },
-  { id: "other", label: "Other" },
-];
-
 export const HistoryClient: React.FC<HistoryClientProps> = ({
   initialProjects,
   initialUser,
@@ -72,7 +58,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const { data: session } = useSession();
   const [projects, setProjects] = useState<ProjectRecord[]>(initialProjects);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [itemsPerPage, setItemsPerPage] = useState<number>(12);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -324,31 +309,17 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     }
   };
 
-  // Filtered projects based on search query & category tab
+  // Filtered projects based on search query
   const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return projects;
+    const query = searchQuery.toLowerCase().trim();
     return projects.filter((project) => {
-      // Category filter
-      if (selectedCategory !== "all") {
-        const cat = (project.detectedObject || "other").toLowerCase();
-        if (cat !== selectedCategory.toLowerCase()) {
-          return false;
-        }
-      }
-
-      // Search query filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const originalName = project.originalUrl.split("/").pop()?.toLowerCase() || "";
-        const id = project.id.toLowerCase();
-        const cat = (project.detectedObject || "").toLowerCase();
-        if (!originalName.includes(query) && !id.includes(query) && !cat.includes(query)) {
-          return false;
-        }
-      }
-
-      return true;
+      const originalName = project.originalUrl?.split("/").pop()?.toLowerCase() || "";
+      const id = project.id.toLowerCase();
+      const cat = (project.detectedObject || "").toLowerCase();
+      return originalName.includes(query) || id.includes(query) || cat.includes(query);
     });
-  }, [projects, selectedCategory, searchQuery]);
+  }, [projects, searchQuery]);
 
   // Pagination calculation
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(filteredProjects.length / itemsPerPage);
@@ -568,73 +539,47 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
           </div>
         </div>
 
-        {/* Filter & Search Toolbar */}
+        {/* Clean Search Toolbar */}
         {projects.length > 0 && (
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6 p-4 rounded-[20px] bg-[#131A3A]/70 border border-white/10 backdrop-blur-xl">
-            {/* Category Filter Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-              {CATEGORY_TABS.map((tab) => {
-                const isSelected = selectedCategory === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategory(tab.id);
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3 py-1.5 rounded-pill text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-                      isSelected
-                        ? "bg-primary text-white border border-accent shadow-[0_0_12px_rgba(79,124,255,0.5)]"
-                        : "bg-white/[0.04] text-text-secondary hover:text-white hover:bg-white/10 border border-white/10"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Search Input & Page Size Select */}
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1 sm:w-64">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Search cutouts..."
-                  className="w-full pl-9 pr-3 py-1.5 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-white placeholder:text-text-muted focus:outline-none focus:border-accent"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-
-              {/* Page Size Selector */}
-              <select
-                value={itemsPerPage}
+          <div className="flex items-center justify-between gap-4 mb-6 p-3 sm:p-4 rounded-[18px] bg-[#131A3A]/70 border border-white/10 backdrop-blur-xl">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={searchQuery}
                 onChange={(e) => {
-                  setItemsPerPage(parseInt(e.target.value, 10));
+                  setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-2.5 py-1.5 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-text-secondary focus:outline-none focus:border-accent cursor-pointer"
-              >
-                <option value={12}>12 / page</option>
-                <option value={24}>24 / page</option>
-                <option value={48}>48 / page</option>
-                <option value={-1}>Show All</option>
-              </select>
+                placeholder="Search cutouts by filename..."
+                className="w-full pl-9 pr-8 py-2 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-white placeholder:text-text-muted focus:outline-none focus:border-accent"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-white"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
+
+            {/* Page Size Selector */}
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(parseInt(e.target.value, 10));
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 rounded-pill bg-[#0A0B1E] border border-white/15 text-xs text-text-secondary focus:outline-none focus:border-accent cursor-pointer shrink-0"
+            >
+              <option value={12}>12 / page</option>
+              <option value={24}>24 / page</option>
+              <option value={48}>48 / page</option>
+              <option value={-1}>Show All</option>
+            </select>
           </div>
         )}
 
@@ -803,17 +748,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
               No matching cutouts
             </h3>
             <p className="text-xs text-text-secondary max-w-sm mb-4">
-              No history records matched your search or category filter.
+              No history records matched your search.
             </p>
             <button
               type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedCategory("all");
-              }}
+              onClick={() => setSearchQuery("")}
               className="px-4 py-2 rounded-btn text-xs font-semibold text-accent bg-primary/20 border border-primary/35 hover:bg-primary/30 transition-all cursor-pointer"
             >
-              Reset Filters
+              Clear Search
             </button>
           </div>
         ) : (

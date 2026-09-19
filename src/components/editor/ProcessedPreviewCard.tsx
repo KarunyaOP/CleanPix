@@ -107,7 +107,7 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
           {/* Top inner glass sheen */}
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-20 pointer-events-none" />
 
-          {/* Top Bar with Clear "After" Label */}
+          {/* Top Bar with Dynamic "After" or "After (HD Enhanced)" Label */}
           <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)]">
               <Sparkles size={11} className="text-accent" />
@@ -116,9 +116,7 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
               <span className="text-[11px] font-bold text-white">
-                {isHd
-                  ? "2x HD Enhanced"
-                  : activePreset.id === "transparent"
+                {activePreset.id === "transparent"
                   ? "Alpha PNG"
                   : activePreset.name}
               </span>
@@ -181,9 +179,9 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
           {/* Bottom Status Pill inside Preview */}
           <div className="relative z-20 px-3.5 py-2 bg-[#0A0B1E]/80 backdrop-blur-md border-t border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-text-secondary font-mono">
             <span>
-              Format: <strong className="text-accent">{isHd ? "2x PNG (HD Alpha)" : activePreset.id === "transparent" ? "PNG (Alpha)" : "Preset"}</strong>
+              Format: <strong className="text-accent">{activePreset.id === "transparent" ? "PNG (Alpha)" : "Preset"}</strong>
             </span>
-            <span className="text-text-muted">{isHd ? "2x DPR Sharpened" : "100% Lossless"}</span>
+            <span className="text-text-muted">100% Lossless</span>
           </div>
         </div>
       </div>

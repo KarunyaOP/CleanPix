@@ -46,14 +46,10 @@ export default function HistoryLoading() {
           </div>
         </div>
 
-        {/* Filter & Search Toolbar Skeleton */}
-        <div className="p-4 rounded-[20px] bg-[#131A3A]/70 border border-white/10 mb-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 animate-pulse">
-          <div className="flex items-center gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="w-20 h-7 rounded-pill bg-white/[0.06]" />
-            ))}
-          </div>
-          <div className="w-48 h-8 rounded-pill bg-white/[0.06]" />
+        {/* Clean Search Toolbar Skeleton */}
+        <div className="p-3 sm:p-4 rounded-[18px] bg-[#131A3A]/70 border border-white/10 mb-6 flex items-center justify-between gap-4 animate-pulse">
+          <div className="w-full max-w-md h-9 rounded-pill bg-white/[0.06]" />
+          <div className="w-24 h-9 rounded-pill bg-white/[0.06] shrink-0" />
         </div>
 
         {/* History Compact Cards Grid Skeleton */}
