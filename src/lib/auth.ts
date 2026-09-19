@@ -8,7 +8,6 @@ import nodemailer from "nodemailer";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  secret: process.env.NEXTAUTH_SECRET || "cleanpix_super_secret_jwt_key_9876543210",
   session: {
     strategy: "jwt",
   },
@@ -30,7 +29,7 @@ export const authOptions: NextAuthOptions = {
           pass: process.env.EMAIL_SERVER_PASSWORD || "",
         },
       },
-      from: process.env.EMAIL_FROM || "CleanPix <no-reply@cleanpix.app>",
+      from: process.env.EMAIL_FROM || "CleanPix <karunyapk@gmail.com>",
       maxAge: 24 * 60 * 60, // 24 hours
       async sendVerificationRequest({ identifier: email, url, provider }) {
         try {
@@ -38,7 +37,7 @@ export const authOptions: NextAuthOptions = {
           const port = Number(process.env.EMAIL_SERVER_PORT) || (typeof provider.server === "object" ? Number((provider.server as any).port) : 587);
           const user = process.env.EMAIL_SERVER_USER || (typeof provider.server === "object" ? (provider.server as any).auth?.user : undefined);
           const pass = process.env.EMAIL_SERVER_PASSWORD || (typeof provider.server === "object" ? (provider.server as any).auth?.pass : undefined);
-          const from = process.env.EMAIL_FROM || provider.from || "CleanPix <no-reply@cleanpix.app>";
+          const from = process.env.EMAIL_FROM || provider.from || "CleanPix <karunyapk@gmail.com>";
 
           const transport = nodemailer.createTransport({
             host,
