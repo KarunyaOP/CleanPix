@@ -109,8 +109,12 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
 
           {/* Top Bar with Dynamic "After" or "After (HD Enhanced)" Label */}
           <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)]">
-              <Sparkles size={11} className="text-accent" />
+            <div
+              className={`inline-flex items-center rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)] shrink-0 ${
+                isHd ? "gap-1 px-2.5 py-1" : "gap-1.5 px-3 py-1"
+              }`}
+            >
+              <Sparkles size={11} className="text-accent shrink-0" />
               <span>{isHd ? "After (HD Enhanced)" : "After"}</span>
             </div>
             <div className="flex items-center gap-1.5">
