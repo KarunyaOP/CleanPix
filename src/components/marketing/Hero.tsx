@@ -146,9 +146,9 @@ export const Hero: React.FC = () => {
         {/* Validation Error Toast */}
         <ValidationToast error={error} onDismiss={clearError} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* LEFT COLUMN: Results Page Navigation & Options OR Landing Page Copy & Upload Zone */}
-          <div className="lg:col-span-5 flex flex-col items-start text-left z-10 w-full">
+          <div className="lg:col-span-5 flex flex-col items-start text-left z-10 w-full max-w-full lg:max-w-[460px]">
             {file && previewUrl ? (
               /* RESULTS PAGE: Left Column with Single Back Button & Cards */
               <div className="w-full">
@@ -187,8 +187,8 @@ export const Hero: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Main Headline */}
-                <h1 className="font-heading font-extrabold text-3xl sm:text-5xl lg:text-[48px] xl:text-[56px] leading-[1.12] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6">
+                {/* Main Headline (Max 3 lines) */}
+                <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-[42px] xl:text-[48px] leading-[1.14] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 max-w-[480px]">
                   Remove Backgrounds <br className="hidden sm:inline" />
                   <span className="text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
                     in Seconds
@@ -196,19 +196,19 @@ export const Hero: React.FC = () => {
                 </h1>
 
                 {/* Subcopy */}
-                <p className="text-sm sm:text-base lg:text-lg text-text-secondary leading-relaxed max-w-lg mb-6 sm:mb-8 font-normal">
+                <p className="text-sm sm:text-base lg:text-[15px] xl:text-base text-text-secondary leading-relaxed max-w-[440px] lg:max-w-[460px] mb-6 sm:mb-8 font-normal">
                   Turn your photos into stunning visuals with our AI-powered background
                   remover. No skills. No hassle. Just results.
                 </p>
 
-                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER */}
+                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER (420-440px on desktop) */}
                 <div
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={openFilePicker}
-                  className={`w-full rounded-[22px] border-2 transition-all duration-200 cursor-pointer p-4 sm:p-5 mb-3 relative overflow-hidden group select-none ${
+                  className={`w-full max-w-full lg:max-w-[430px] rounded-[22px] border-2 transition-all duration-200 cursor-pointer p-4 sm:p-5 mb-3 relative overflow-hidden group select-none ${
                     isDragging
                       ? "border-primary bg-primary/15 shadow-[0_0_40px_rgba(79,124,255,0.7),inset_0_0_20px_rgba(79,124,255,0.3)] scale-[1.02]"
                       : "border-dashed border-primary/40 bg-[#131A3A]/60 hover:border-primary/80 hover:bg-[#131A3A]/85 hover:shadow-[0_0_30px_rgba(79,124,255,0.25)] backdrop-blur-xl"
@@ -286,7 +286,7 @@ export const Hero: React.FC = () => {
                 </p>
 
                 {/* 4-Item Feature Icons / Trust Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 w-full pt-5 sm:pt-6 border-t border-white/[0.1]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full lg:max-w-[430px] pt-5 sm:pt-6 border-t border-white/[0.1]">
                   {trustFeatures.map((feature) => {
                     const Icon = feature.icon;
                     return (
@@ -312,7 +312,7 @@ export const Hero: React.FC = () => {
           <div className="lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full">
             {file && previewUrl ? (
               /* RESULTS PAGE: Large Processed Image Preview + Copy Transparent PNG Section */
-              <div className="w-full max-w-[760px] flex flex-col gap-4">
+              <div className="w-full max-w-[780px] flex flex-col gap-4">
                 <ProcessedPreviewCard
                   key={isHdReady && hdUrl ? hdUrl : previewUrl}
                   originalUrl={previewUrl}
@@ -326,7 +326,7 @@ export const Hero: React.FC = () => {
               </div>
             ) : (
               /* LANDING PAGE: Static Before / After Demo Showcase + Compact Smart Recommendation Panel */
-              <div className="w-full max-w-[760px] flex flex-col gap-4">
+              <div className="w-full max-w-[780px] flex flex-col gap-4">
                 <ProcessedPreviewCard
                   originalUrl="/images/hero-original.jpg"
                   processedUrl="/images/hero-cutout.jpg"

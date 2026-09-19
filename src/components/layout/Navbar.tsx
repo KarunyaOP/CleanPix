@@ -114,7 +114,7 @@ export const Navbar: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-[#0A0B1E]/80 backdrop-blur-2xl transition-all duration-200">
-        <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-18 flex items-center justify-between">
           {/* Brand Logo */}
           <Link
             href="/"
@@ -123,22 +123,22 @@ export const Navbar: React.FC = () => {
               window.scrollTo({ top: 0, behavior: "smooth" });
               setActiveLink("Home");
             }}
-            className="flex items-center gap-3.5 group select-none cursor-pointer"
+            className="flex items-center gap-2.5 sm:gap-3 group select-none cursor-pointer"
           >
-            <div className="relative w-10 h-10 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
+            <div className="relative w-8 h-8 sm:w-9 sm:h-9 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
               <img
                 src="/branding/logo/cleanpix-icon.svg"
                 alt="CleanPix Brand Icon"
-                className="w-10 h-10 object-contain drop-shadow-[0_0_18px_rgba(0,240,255,0.45)]"
+                className="w-8 h-8 sm:w-9 sm:h-9 object-contain drop-shadow-[0_0_18px_rgba(0,240,255,0.45)]"
               />
             </div>
-            <span className="font-heading font-bold text-2xl text-[#F8FAFC] tracking-tight group-hover:text-white transition-colors">
+            <span className="font-heading font-bold text-xl sm:text-2xl text-[#F8FAFC] tracking-tight group-hover:text-white transition-colors">
               Clean<span className="font-extrabold bg-gradient-to-r from-[#38BDF8] via-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Pix</span>
             </span>
           </Link>
 
           {/* Center Nav Links - Desktop */}
-          <nav className="hidden md:flex items-center gap-9">
+          <nav className="hidden md:flex items-center gap-6 lg:gap-7">
             {navLinks.map((link) => {
               const isActive = activeLink === link.label;
               return (
@@ -146,7 +146,7 @@ export const Navbar: React.FC = () => {
                   key={link.label}
                   href={link.href}
                   onClick={(e) => handleNavClick(e, link.href, link.label)}
-                  className={`relative py-1.5 text-sm font-medium tracking-wide transition-all duration-150 cursor-pointer ${
+                  className={`relative py-1.5 text-xs lg:text-sm font-medium tracking-wide transition-all duration-150 cursor-pointer ${
                     isActive
                       ? "text-[#F8FAFC] font-semibold"
                       : "text-text-secondary hover:text-[#F8FAFC]"
@@ -154,7 +154,7 @@ export const Navbar: React.FC = () => {
                 >
                   {link.label}
                   {isActive && (
-                    <span className="absolute -bottom-1 left-0 right-0 h-[2.5px] rounded-full bg-gradient-to-r from-primary to-accent shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
+                    <span className="absolute -bottom-1 left-0 right-0 h-[2px] rounded-full bg-gradient-to-r from-primary to-accent shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
                   )}
                 </a>
               );
@@ -164,12 +164,12 @@ export const Navbar: React.FC = () => {
           {/* Right Actions - Desktop */}
           <div className="hidden md:flex items-center gap-3">
             {session?.user ? (
-              /* Authenticated View: Compact Sleek Profile Menu */
+              /* Authenticated View: Compact Single-Row Sleek Profile Menu */
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group"
+                  className="flex items-center gap-1.5 lg:gap-2 px-2.5 py-1 rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group text-xs shrink-0"
                   aria-expanded={userDropdownOpen}
                   aria-haspopup="true"
                 >
@@ -178,25 +178,25 @@ export const Navbar: React.FC = () => {
                       src={session.user.image}
                       alt={session.user.name || "User"}
                       referrerPolicy="no-referrer"
-                      className="w-6 h-6 rounded-full border border-white/20 object-cover"
+                      className="w-5.5 h-5.5 rounded-full border border-white/20 object-cover"
                     />
                   ) : (
-                    <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-accent">
-                      <User size={12} />
+                    <div className="w-5.5 h-5.5 rounded-full bg-primary/30 flex items-center justify-center text-accent">
+                      <User size={11} />
                     </div>
                   )}
-                  <span className="text-xs font-semibold text-white truncate max-w-[100px]">
+                  <span className="text-[11px] lg:text-xs font-semibold text-white truncate max-w-[80px] lg:max-w-[95px]">
                     {session.user.name || session.user.email?.split("@")[0] || "Account"}
                   </span>
-                  <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
+                  <span className={`px-1.5 py-0.5 rounded-pill border text-[9px] font-bold ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
                     {getPlanBadgeConfig(currentPlan).label}
                   </span>
                   {["pro", "business", "enterprise"].includes(currentPlan.toLowerCase()) ? (
-                    <span className="px-2 py-0.5 rounded-pill border text-[10px] font-bold bg-primary/25 border-primary/40 text-accent">
+                    <span className="px-1.5 py-0.5 rounded-pill border text-[9px] font-bold bg-primary/25 border-primary/40 text-accent">
                       Unlimited
                     </span>
                   ) : (
-                    <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${
+                    <span className={`px-1.5 py-0.5 rounded-pill border text-[9px] font-bold ${
                       currentCredits <= 0
                         ? "bg-red-500/20 border-red-500/40 text-red-300"
                         : "bg-primary/25 border-primary/40 text-accent"
@@ -205,7 +205,7 @@ export const Navbar: React.FC = () => {
                     </span>
                   )}
                   <ChevronDown
-                    size={12}
+                    size={11}
                     className={`text-text-muted group-hover:text-white transition-transform duration-200 ${
                       userDropdownOpen ? "rotate-180" : ""
                     }`}
