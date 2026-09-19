@@ -125,7 +125,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
       if (error) {
         console.error("[SUPABASE_AUTH_ERROR]", error);
-        setErrorMessage(error.message || "Failed to send magic link. Please try again.");
+        if (
+          error.message?.toLowerCase().includes("api key") ||
+          error.message?.toLowerCase().includes("jwt") ||
+          error.message?.toLowerCase().includes("invalid key") ||
+          error.message?.toLowerCase().includes("anon key")
+        ) {
+          setErrorMessage(
+            "Supabase anonymous key is not configured. Please add NEXT_PUBLIC_SUPABASE_ANON_KEY to your Vercel Project Settings."
+          );
+        } else {
+          setErrorMessage(error.message || "Failed to send magic link. Please try again.");
+        }
       } else {
         console.log("[SUPABASE_AUTH_SUCCESS] Magic link dispatched via Supabase");
         setIsEmailSent(true);
