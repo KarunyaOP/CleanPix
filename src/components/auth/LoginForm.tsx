@@ -65,7 +65,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   /**
    * Safely resolves and cleans the target callback URL.
    * Completely prevents URL duplication (e.g. /https://..., https://domain/https://domain).
-   * Defaults to "/dashboard".
+   * Respects explicit callbackUrl parameters (/history, /dashboard, /#pricing)
+   * and defaults to the Home editor page ("/") for standard logins.
    */
   const getTargetCallbackUrl = (): string => {
     try {
@@ -90,11 +91,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               if (internalPath.startsWith("/http://") || internalPath.startsWith("/https://")) {
                 trimmed = internalPath;
               } else {
-                trimmed = internalPath || "/dashboard";
+                trimmed = internalPath || (guestHref || "/");
                 break;
               }
             } catch {
-              trimmed = urlSubstr.replace(/^https?:\/\/[^\/]+/, "") || "/dashboard";
+              trimmed = urlSubstr.replace(/^https?:\/\/[^\/]+/, "") || (guestHref || "/");
               break;
             }
           }
@@ -111,9 +112,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             trimmed = `/${trimmed}`;
           }
 
-          // 4. Default home or empty redirect to /dashboard
-          if (trimmed === "/" || trimmed === "" || trimmed === "/login") {
-            const target = "/dashboard";
+          // 4. If callback was /login, fallback to guestHref or "/"
+          if (trimmed === "/login") {
+            const target = guestHref || "/";
             console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: target });
             return target;
           }
@@ -126,7 +127,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       console.error("[AUTH_CALLBACK_URL_ERROR]", err);
     }
 
-    const fallback = guestHref && guestHref !== "/" ? guestHref : "/dashboard";
+    const fallback = guestHref || "/";
     console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw: null, resolved: fallback });
     return fallback;
   };

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, Sparkles, Zap, Info, Building2 } from "lucide-react";
+import { Check, Sparkles, Zap, Info, Building2, CheckCircle2, X } from "lucide-react";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
 export const PricingSection: React.FC = () => {
@@ -13,6 +13,9 @@ export const PricingSection: React.FC = () => {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [modalPlan, setModalPlan] = useState<"pro" | "business">("pro");
   const [cancelToast, setCancelToast] = useState(false);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const [livePlan, setLivePlan] = useState<string | null>(null);
+  const [isProcessingClick, setIsProcessingClick] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -29,7 +32,52 @@ export const PricingSection: React.FC = () => {
     }
   }, []);
 
+  // Listen for live plan updates (e.g. after successful Razorpay checkout)
+  useEffect(() => {
+    const handlePlanUpdated = (e: any) => {
+      if (e.detail?.plan) {
+        setLivePlan(e.detail.plan.toLowerCase());
+      }
+    };
+    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    return () => window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
+  }, []);
+
+  const isPlanLoading = status === "loading";
   const isLoggedIn = status === "authenticated" || Boolean((session as any)?.user);
+  const sessionPlan = ((session?.user as any)?.plan || "free").toLowerCase();
+  const activePlan = livePlan || sessionPlan;
+
+  const isBusiness = activePlan === "business" || activePlan === "enterprise";
+  const isPro = activePlan === "pro";
+  const isFree = !isPro && !isBusiness;
+
+  const showNotice = (msg: string) => {
+    setPlanNotice(msg);
+    if (typeof window !== "undefined") {
+      const timer = setTimeout(() => setPlanNotice(null), 4500);
+      return () => clearTimeout(timer);
+    }
+  };
+
+  const getProCta = () => {
+    if (!isLoggedIn) return "Get Pro Creator";
+    if (isPro) return "Current Plan";
+    if (isBusiness) return "Included in Business";
+    return "Upgrade to Pro";
+  };
+
+  const getBusinessCta = () => {
+    if (!isLoggedIn) return "Get Business Plan";
+    if (isBusiness) return "Current Plan";
+    return "Upgrade to Business";
+  };
+
+  const getStarterCta = () => {
+    if (!isLoggedIn) return "Start Free";
+    if (isFree) return "Current Plan";
+    return "Go to Editor";
+  };
 
   const plans = [
     {
@@ -46,9 +94,10 @@ export const PricingSection: React.FC = () => {
         "Single-Image Processing",
         "Standard Processing Pipeline",
       ],
-      cta: isLoggedIn ? "Go to Editor" : "Start Free",
+      cta: getStarterCta(),
       popular: false,
       isBusiness: false,
+      isCurrent: isLoggedIn && isFree,
     },
     {
       id: "pro",
@@ -65,9 +114,10 @@ export const PricingSection: React.FC = () => {
         "Smart Background Recommendations",
         "Standard High-Speed AI Pipeline",
       ],
-      cta: isLoggedIn ? "Upgrade to Pro" : "Get Pro Creator",
+      cta: getProCta(),
       popular: true,
       isBusiness: false,
+      isCurrent: isLoggedIn && isPro,
     },
     {
       id: "business",
@@ -85,13 +135,18 @@ export const PricingSection: React.FC = () => {
         "Official Business Dashboard Badge",
         "Future API Access (Coming Soon)",
       ],
-      cta: isLoggedIn ? "Upgrade to Business" : "Get Business Plan",
+      cta: getBusinessCta(),
       popular: false,
       isBusiness: true,
+      isCurrent: isLoggedIn && isBusiness,
     },
   ];
 
   const handlePlanClick = (planId: string) => {
+    if (isProcessingClick || isPlanLoading) return;
+    setIsProcessingClick(true);
+    setTimeout(() => setIsProcessingClick(false), 400);
+
     if (planId === "starter") {
       if (isLoggedIn) {
         if (pathname === "/") {
@@ -111,22 +166,43 @@ export const PricingSection: React.FC = () => {
     }
 
     if (planId === "pro") {
-      if (isLoggedIn) {
-        setModalPlan("pro");
-        setIsUpgradeModalOpen(true);
-      } else {
+      if (!isLoggedIn) {
         router.push("/login?redirect=pricing");
+        return;
       }
+
+      // Pro Plan Guard
+      if (isPro) {
+        showNotice("You already have the Pro plan.");
+        return;
+      }
+
+      if (isBusiness) {
+        showNotice("You already have the Business plan.");
+        return;
+      }
+
+      // Free user upgrading to Pro
+      setModalPlan("pro");
+      setIsUpgradeModalOpen(true);
       return;
     }
 
     if (planId === "business") {
-      if (isLoggedIn) {
-        setModalPlan("business");
-        setIsUpgradeModalOpen(true);
-      } else {
+      if (!isLoggedIn) {
         router.push("/login?redirect=pricing");
+        return;
       }
+
+      // Business Plan Guard
+      if (isBusiness) {
+        showNotice("You already have the Business plan.");
+        return;
+      }
+
+      // Free or Pro user upgrading to Business
+      setModalPlan("business");
+      setIsUpgradeModalOpen(true);
       return;
     }
   };
@@ -137,12 +213,30 @@ export const PricingSection: React.FC = () => {
         <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16">
           {/* Section Header */}
           <div className="flex flex-col items-center text-center max-w-2xl mx-auto mb-16 sm:mb-20">
+            {/* Payment Cancelled Notice */}
             {cancelToast && (
               <div className="mb-4 inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-white/10 border border-white/20 text-xs font-semibold text-text-primary animate-in fade-in slide-in-from-top-2 duration-200">
                 <Info size={14} className="text-accent" />
                 <span>Checkout was cancelled. No charges were made.</span>
               </div>
             )}
+
+            {/* Plan-Aware Notice (e.g. "You already have the Pro plan.") */}
+            {planNotice && (
+              <div className="mb-5 inline-flex items-center gap-2.5 px-5 py-2.5 rounded-pill bg-[#131A3A]/95 border border-primary/50 text-xs sm:text-sm font-semibold text-white shadow-[0_0_24px_rgba(79,124,255,0.4)] backdrop-blur-2xl animate-in fade-in slide-in-from-top-3 duration-200">
+                <CheckCircle2 size={16} className="text-accent shrink-0" />
+                <span>{planNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setPlanNotice(null)}
+                  className="ml-1 p-0.5 rounded-full text-text-muted hover:text-white transition-colors cursor-pointer"
+                  aria-label="Dismiss notice"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill bg-[#131A3A] border border-primary/30 text-xs font-semibold text-accent mb-4">
               <Zap size={13} />
               <span>Simple Transparent Pricing</span>
@@ -221,16 +315,19 @@ export const PricingSection: React.FC = () => {
 
                 <button
                   type="button"
+                  disabled={isPlanLoading || isProcessingClick}
                   onClick={() => handlePlanClick(plan.id)}
-                  className={`relative z-10 w-full py-3.5 rounded-btn text-sm font-heading font-bold transition-all cursor-pointer ${
-                    plan.popular
+                  className={`relative z-10 w-full py-3.5 rounded-btn text-sm font-heading font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+                    plan.isCurrent
+                      ? "bg-white/[0.1] text-white border border-accent/40 shadow-[0_0_16px_rgba(34,211,238,0.25)]"
+                      : plan.popular
                       ? "bg-gradient-to-r from-primary to-secondary text-white shadow-[0_0_24px_rgba(79,124,255,0.6)] hover:shadow-[0_0_36px_rgba(79,124,255,0.9)] hover:-translate-y-0.5 active:translate-y-0"
                       : plan.isBusiness
                       ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-[0_0_24px_rgba(245,158,11,0.5)] hover:shadow-[0_0_36px_rgba(245,158,11,0.8)] hover:-translate-y-0.5 active:translate-y-0"
                       : "bg-white/[0.08] hover:bg-white/15 text-white border border-white/15 hover:border-primary/40 active:scale-[0.98]"
                   }`}
                 >
-                  {plan.cta}
+                  {isPlanLoading ? "Loading..." : plan.cta}
                 </button>
               </div>
             ))}

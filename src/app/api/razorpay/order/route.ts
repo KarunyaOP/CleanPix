@@ -51,6 +51,23 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
+    const currentPlan = (user.plan || "free").toLowerCase();
+
+    // Server-Side Plan Validation: Prevent duplicate orders for already owned plans
+    if (currentPlan === "business" || currentPlan === "enterprise") {
+      return NextResponse.json(
+        { error: "You already have the Business plan." },
+        { status: 400 }
+      );
+    }
+
+    if (currentPlan === "pro" && targetPlan === "pro") {
+      return NextResponse.json(
+        { error: "You already have the Pro plan." },
+        { status: 400 }
+      );
+    }
+
     // Target plan pricing: Pro = ₹99 (9900 paise), Business = ₹399 (39900 paise)
     const amount = targetPlan === "business" ? 39900 : 9900;
     const currency = (process.env.RAZORPAY_CURRENCY || "INR").toUpperCase();

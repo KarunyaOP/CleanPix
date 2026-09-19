@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Building2,
+  Info,
 } from "lucide-react";
 
 export interface UpgradeModalProps {
@@ -68,15 +69,29 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const sessionPlan = ((session?.user as any)?.plan || "free").toLowerCase();
+  const isAlreadyBusiness = sessionPlan === "business" || sessionPlan === "enterprise";
+  const isAlreadyPro = sessionPlan === "pro";
+
+  // Check if current selected tab matches user's current or lower plan
+  const isCurrentPlanSelected =
+    (selectedPlan === "pro" && (isAlreadyPro || isAlreadyBusiness)) ||
+    (selectedPlan === "business" && isAlreadyBusiness);
+
   // Sync selected plan with initialPlan when modal opens
   useEffect(() => {
     if (isOpen) {
-      setSelectedPlan(initialPlan || "pro");
+      // If user is on Pro, default modal tab to "business" unless explicitly asked
+      if (isAlreadyPro && initialPlan === "pro") {
+        setSelectedPlan("business");
+      } else {
+        setSelectedPlan(initialPlan || "pro");
+      }
       setIsLoading(false);
       setIsSuccess(false);
       setErrorMessage(null);
     }
-  }, [isOpen, initialPlan]);
+  }, [isOpen, initialPlan, isAlreadyPro]);
 
   // ESC key listener
   useEffect(() => {
@@ -107,6 +122,17 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
           window.location.href = "/#pricing";
         }
       }
+      return;
+    }
+
+    // Plan Guard: Prevent duplicate order creation
+    if (isAlreadyBusiness) {
+      setErrorMessage("You already have the Business plan.");
+      return;
+    }
+
+    if (selectedPlan === "pro" && isAlreadyPro) {
+      setErrorMessage("You already have the Pro plan.");
       return;
     }
 
@@ -265,9 +291,12 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
   const currentBadge =
     badge || (selectedPlan === "business" ? "Business Commercial Plan" : "Pro Creator Plan");
 
-  const currentButtonText =
-    buttonText ||
-    (selectedPlan === "business" ? "Get Business for ₹399" : "Get Pro Creator for ₹99");
+  const currentButtonText = isAlreadyBusiness
+    ? "You already have the Business plan."
+    : selectedPlan === "pro" && isAlreadyPro
+    ? "You already have the Pro plan."
+    : buttonText ||
+      (selectedPlan === "business" ? "Get Business for ₹399" : "Get Pro Creator for ₹99");
 
   return (
     <div
@@ -373,7 +402,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
             </div>
 
             {/* Interactive Plan Selector Switcher */}
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-[16px] bg-[#0A0B1E] border border-white/10 mb-5">
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-[16px] bg-[#0A0B1E] border border-white/10 mb-4">
               <button
                 type="button"
                 onClick={() => setSelectedPlan("pro")}
@@ -383,7 +412,14 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
                     : "text-text-secondary hover:text-white"
                 }`}
               >
-                <span>Pro Creator</span>
+                <div className="flex items-center gap-1">
+                  <span>Pro Creator</span>
+                  {isAlreadyPro && (
+                    <span className="px-1.5 py-0.2 rounded-pill bg-purple-500/30 text-[9px] uppercase border border-purple-400/40 text-purple-200">
+                      Active
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] opacity-90">₹99 one-time</span>
               </button>
 
@@ -398,13 +434,31 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
               >
                 <div className="flex items-center gap-1">
                   <span>Business</span>
-                  <span className="px-1.5 py-0.2 rounded-pill bg-white/20 text-[9px] uppercase">
-                    PRO+
-                  </span>
+                  {isAlreadyBusiness ? (
+                    <span className="px-1.5 py-0.2 rounded-pill bg-amber-500/30 text-[9px] uppercase border border-amber-400/40 text-amber-200">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded-pill bg-white/20 text-[9px] uppercase">
+                      PRO+
+                    </span>
+                  )}
                 </div>
                 <span className="text-[11px] opacity-90">₹399 one-time</span>
               </button>
             </div>
+
+            {/* Plan-Aware Notice inside Modal */}
+            {isCurrentPlanSelected && (
+              <div className="mb-4 p-3 rounded-xl bg-primary/20 border border-primary/40 flex items-center gap-2.5 text-xs font-semibold text-white animate-in fade-in duration-200">
+                <Info size={15} className="text-accent shrink-0" />
+                <span>
+                  {isAlreadyBusiness
+                    ? "You already have the Business plan."
+                    : "You already have the Pro plan."}
+                </span>
+              </div>
+            )}
 
             {/* Plan Highlights Card */}
             <div className="p-4 rounded-[20px] bg-[#0A0B1E]/80 border border-white/10 mb-5">
@@ -505,10 +559,12 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
             <div className="flex flex-col gap-2.5">
               <button
                 type="button"
-                disabled={isLoading}
+                disabled={isLoading || isCurrentPlanSelected}
                 onClick={handlePrimaryClick}
-                className={`w-full py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none ${
-                  selectedPlan === "business"
+                className={`w-full py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none ${
+                  isCurrentPlanSelected
+                    ? "bg-white/[0.1] text-white/80 border border-white/20"
+                    : selectedPlan === "business"
                     ? "bg-gradient-to-r from-amber-500 to-amber-600 shadow-[0_0_24px_rgba(245,158,11,0.6)] hover:shadow-[0_0_36px_rgba(245,158,11,0.85)]"
                     : "bg-gradient-to-r from-primary to-secondary shadow-[0_0_24px_rgba(79,124,255,0.6)] hover:shadow-[0_0_36px_rgba(79,124,255,0.85)]"
                 }`}
@@ -521,7 +577,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
                 ) : (
                   <>
                     <span>{currentButtonText}</span>
-                    <ArrowRight size={15} />
+                    {!isCurrentPlanSelected && <ArrowRight size={15} />}
                   </>
                 )}
               </button>
@@ -532,7 +588,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
                 onClick={onClose}
                 className="w-full py-2 px-4 rounded-btn text-xs font-semibold text-text-secondary hover:text-white transition-colors text-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Maybe Later
+                {isCurrentPlanSelected ? "Close" : "Maybe Later"}
               </button>
             </div>
 

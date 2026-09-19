@@ -1,9 +1,28 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, Suspense } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm } from "@/components/auth/LoginForm";
 
-export default function LoginPage() {
+function LoginPageContent() {
+  const { status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const raw = searchParams.get("callbackUrl") || searchParams.get("redirect") || "/";
+      const target = raw === "/login" ? "/" : raw;
+      router.replace(target);
+    }
+  }, [status, router, searchParams]);
+
+  // If already authenticated, show neutral background while redirecting to destination
+  if (status === "authenticated") {
+    return <div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />;
+  }
+
   return (
     <main className="min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 relative select-none overflow-hidden">
       {/* Ambient background glows */}
@@ -13,5 +32,13 @@ export default function LoginPage() {
 
       <LoginForm guestHref="/" />
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

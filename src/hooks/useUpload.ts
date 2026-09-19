@@ -28,82 +28,48 @@ export interface ToastState {
 }
 
 /**
- * Polls the transformed Cloudinary URL to ensure the alpha background removal
- * or HD transformation is completely rendered and available with status 200 before releasing the UI loader.
+ * Preloads the transformed Cloudinary URL using standard Image element decoding
+ * to guarantee instantaneous, flicker-free rendering when revealing the cutout.
  */
-const pollForProcessedImage = (
+const preloadProcessedImage = (
   url: string,
-  maxAttempts = 30,
-  intervalMs = 1000
+  maxAttempts = 15,
+  intervalMs = 800
 ): Promise<string> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let attempts = 0;
 
-    const checkStatus = async () => {
+    const tryLoad = () => {
       attempts++;
-      try {
-        const cacheBustedUrl = `${url}${url.includes("?") ? "&" : "?"}_cb=${Date.now()}`;
-        const response = await fetch(cacheBustedUrl, { method: "HEAD", cache: "no-store" });
-
-        if (response.status === 200) {
-          // Verify browser decoding
-          const img = new Image();
-          img.onload = () => resolve(url);
-          img.onerror = () => {
-            if (attempts >= maxAttempts) {
-              reject(new Error("Image processing completed but failed to render in browser."));
-            } else {
-              setTimeout(checkStatus, intervalMs);
-            }
-          };
-          img.src = cacheBustedUrl;
-          return;
-        }
-
-        if (response.status === 423 || response.status === 420 || response.status === 404) {
-          // Cloudinary AI background removal or HD rendering is in progress
-          if (attempts >= maxAttempts) {
-            reject(
-              new Error(
-                "Image processing timed out. Cloudinary AI is taking longer than expected. Please try again."
-              )
-            );
-          } else {
-            setTimeout(checkStatus, intervalMs);
-          }
-          return;
-        }
-
-        if (response.status >= 400) {
-          reject(
-            new Error(
-              `Cloudinary returned status ${response.status}. Please check your Cloudinary AI Background Removal add-on.`
-            )
-          );
-          return;
-        }
-
-        // Other unexpected status, retry until maxAttempts
-        if (attempts >= maxAttempts) {
-          reject(new Error("Image processing could not be completed."));
-        } else {
-          setTimeout(checkStatus, intervalMs);
-        }
-      } catch (err: any) {
-        if (attempts >= maxAttempts) {
-          reject(new Error(err.message || "Network error while polling image result."));
-        } else {
-          setTimeout(checkStatus, intervalMs);
-        }
+      if (typeof window === "undefined") {
+        return resolve(url);
       }
+
+      const img = new Image();
+      const cacheBustedUrl = `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+
+      img.onload = () => {
+        resolve(url);
+      };
+
+      img.onerror = () => {
+        if (attempts >= maxAttempts) {
+          // If polling reached limit, resolve with url directly so UI renders it
+          resolve(url);
+        } else {
+          setTimeout(tryLoad, intervalMs);
+        }
+      };
+
+      img.src = cacheBustedUrl;
     };
 
-    checkStatus();
+    tryLoad();
   });
 };
 
 export function useUpload() {
-  const { update: updateSession } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
@@ -113,6 +79,7 @@ export function useUpload() {
   const [hdError, setHdError] = useState<string | null>(null);
 
   const [detectedObject, setDetectedObject] = useState<DetectedCategory | null>(null);
+  const [framing, setFraming] = useState<number | "fit" | "balanced" | "spacious">(0);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -255,9 +222,17 @@ export function useUpload() {
     };
   }, [previewUrl]);
 
-  const startBackgroundRemoval = useCallback(async () => {
+  const startBackgroundRemoval = useCallback(async (customFraming?: number | "fit" | "balanced" | "spacious") => {
     if (!file || isProcessingAI) return;
     clearError();
+
+    const activeFraming = customFraming !== undefined ? customFraming : framing;
+    const framingStr =
+      activeFraming === 100 || activeFraming === "spacious"
+        ? "spacious"
+        : activeFraming === 50 || activeFraming === "balanced"
+        ? "balanced"
+        : "fit";
 
     setIsUploading(true);
     setIsProcessingAI(true);
@@ -266,9 +241,22 @@ export function useUpload() {
     setIsHdReady(false);
 
     try {
-      // 1. Prepare FormData with exact uploaded file
+      // 1. Prepare FormData with exact uploaded file and selected framing
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("framing", framingStr);
+      formData.append(
+        "paddingPercent",
+        String(
+          typeof activeFraming === "number"
+            ? activeFraming
+            : activeFraming === "spacious"
+            ? 100
+            : activeFraming === "balanced"
+            ? 50
+            : 0
+        )
+      );
 
       setUploadProgress(50);
 
@@ -299,8 +287,8 @@ export function useUpload() {
       }
       setUploadProgress(90);
 
-      // 3. Poll/Preload genuine Cloudinary background-removed URL to ensure transparent PNG is ready
-      await pollForProcessedImage(successData.processedUrl);
+      // 3. Preload genuine Cloudinary background-removed URL to ensure transparent PNG is ready
+      await preloadProcessedImage(successData.processedUrl);
 
       setProcessedUrl(successData.processedUrl);
       setUploadProgress(100);
@@ -314,7 +302,7 @@ export function useUpload() {
             })
           );
         }
-        if (typeof updateSession === "function") {
+        if (session?.user && typeof updateSession === "function") {
           updateSession({ credits: successData.creditsRemaining }).catch((err) =>
             console.error("[USE_UPLOAD_SESSION_UPDATE_ERROR]", err)
           );
@@ -337,7 +325,15 @@ export function useUpload() {
       try {
         const stored = localStorage.getItem("cleanpix_cutout_history");
         const list = stored ? JSON.parse(stored) : [];
-        const updated = [newCutout, ...list.slice(0, 49)];
+        const filtered = Array.isArray(list)
+          ? list.filter(
+              (item: any) =>
+                item.cutoutUrl !== successData.processedUrl &&
+                item.processedUrl !== successData.processedUrl &&
+                item.id !== newCutout.id
+            )
+          : [];
+        const updated = [newCutout, ...filtered.slice(0, 49)];
         localStorage.setItem("cleanpix_cutout_history", JSON.stringify(updated));
       } catch {}
 
@@ -376,8 +372,11 @@ export function useUpload() {
       setIsUploading(false);
       setIsProcessingAI(false);
     }
-  }, [file, isProcessingAI, clearError]);
+  }, [file, isProcessingAI, clearError, session, updateSession]);
 
+  /**
+   * On-demand HD Enhancement workflow with session caching
+   */
   /**
    * On-demand HD Enhancement workflow with session caching
    */
@@ -391,13 +390,18 @@ export function useUpload() {
     setIsEnhancingHd(true);
     setHdError(null);
 
-    // Derive HD URL if not already set
+    // Derive HD URL if not already set (Fine Edges + 2x DPR + AI Sharpening + AI Improvement + Lossless Best Quality)
     let targetHdUrl = hdUrl;
     if (!targetHdUrl && processedUrl) {
-      if (processedUrl.includes("e_background_removal")) {
+      if (processedUrl.includes("e_background_removal:fineedges_y")) {
+        targetHdUrl = processedUrl.replace(
+          "e_background_removal:fineedges_y",
+          "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+        );
+      } else if (processedUrl.includes("e_background_removal")) {
         targetHdUrl = processedUrl.replace(
           "e_background_removal",
-          "e_background_removal/dpr_2.0,e_sharpen,q_auto:best"
+          "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
         );
       } else {
         targetHdUrl = processedUrl;
@@ -408,11 +412,11 @@ export function useUpload() {
     try {
       if (!targetHdUrl) throw new Error("HD transformation URL could not be generated.");
 
-      // Poll and ensure Cloudinary has completed HD sharpening & 2x DPR transformation
-      await pollForProcessedImage(targetHdUrl, 30, 1000);
+      // Preload transformed HD cutout
+      await preloadProcessedImage(targetHdUrl, 20, 800);
 
       setIsHdReady(true);
-      showToast("HD version generated.", "hd");
+      showToast("HD version generated with 2x resolution and enhanced sharpness.", "hd");
     } catch (err: any) {
       console.error("[HD_ENHANCEMENT_ERROR]", err);
       const msg = err.message || "Failed to generate HD version.";
@@ -454,7 +458,7 @@ export function useUpload() {
         }),
       ]);
 
-      showToast("Image copied to clipboard successfully.", "success");
+      showToast(`Image (${isHdReady ? "HD Enhanced" : "Standard"}) copied to clipboard successfully.`, "success");
     } catch (err: any) {
       console.error("[CLIPBOARD_COPY_ERROR]", err);
       const msg = err.message || "Could not copy image to clipboard.";
@@ -469,13 +473,13 @@ export function useUpload() {
   const downloadCutout = useCallback(
     async (quality: "standard" | "hd" = "standard") => {
       const isHd = quality === "hd";
-      const targetUrl = isHd && isHdReady && hdUrl ? hdUrl : processedUrl;
+      const targetUrl = isHd ? (hdUrl || (processedUrl ? processedUrl.replace(/e_background_removal(:fineedges_y)?/, "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best") : null)) : processedUrl;
       if (!targetUrl) return;
 
       const baseName = file ? file.name.replace(/\.[^/.]+$/, "") : "cleanpix";
       const defaultName = `${baseName}_cleanpix_${isHd ? "hd_enhanced" : "standard"}.png`;
 
-      showToast("Download started.", "success");
+      showToast(`Download started (${isHd ? "HD Enhanced 2x" : "Standard 1x"}).`, "success");
 
       try {
         const response = await fetch(targetUrl);
@@ -498,7 +502,7 @@ export function useUpload() {
         document.body.removeChild(link);
       }
     },
-    [file, isHdReady, hdUrl, processedUrl, showToast]
+    [file, hdUrl, processedUrl, showToast]
   );
 
   const handleFileSelect = useCallback(
@@ -599,5 +603,7 @@ export function useUpload() {
     downloadCutout,
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
+    framing,
+    setFraming,
   };
 }

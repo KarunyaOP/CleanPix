@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Copy, Check, Sparkles, Loader2, Image as ImageIcon, Eye } from "lucide-react";
-
+import React, { useState } from "react";
+import { Copy, Check, Sparkles, Loader2, Image as ImageIcon } from "lucide-react";
 import { SmartBackgroundPreset } from "@/types/schema";
 import { TRANSPARENT_PRESET } from "@/utils/backgroundPresets";
 
@@ -10,38 +9,28 @@ export interface ProcessedPreviewCardProps {
   originalUrl: string;
   processedUrl?: string | null;
   isProcessing?: boolean;
+  isHd?: boolean;
   onCopyClipboard: () => Promise<void>;
   detectedCategory?: string | null;
   showCopySection?: boolean;
   activePreset?: SmartBackgroundPreset;
   paddingPercent?: number;
+  initialTab?: "before" | "after";
 }
 
 export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
   originalUrl,
   processedUrl,
   isProcessing = false,
+  isHd = false,
   onCopyClipboard,
   detectedCategory,
   showCopySection = true,
   activePreset = TRANSPARENT_PRESET,
   paddingPercent = 0,
 }) => {
-  // Default to "after" if processedUrl exists, otherwise "before"
-  const [activeTab, setActiveTab] = useState<"before" | "after">(
-    processedUrl ? "after" : "before"
-  );
   const [isCopying, setIsCopying] = useState<boolean>(false);
   const [hasCopied, setHasCopied] = useState<boolean>(false);
-
-  // Automatically switch tabs: "after" when processed cutout arrives, "before" when fresh original is loaded
-  useEffect(() => {
-    if (processedUrl) {
-      setActiveTab("after");
-    } else {
-      setActiveTab("before");
-    }
-  }, [processedUrl, originalUrl]);
 
   const handleCopyClick = async () => {
     if (isCopying) return;
@@ -51,114 +40,151 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
       setHasCopied(true);
       setTimeout(() => setHasCopied(false), 2500);
     } catch {
-      // Parent handles toast error
+      // Parent handles error toast
     } finally {
       setIsCopying(false);
     }
   };
 
   const isCutoutReady = Boolean(processedUrl);
-  const displayImage = activeTab === "after" && processedUrl ? processedUrl : originalUrl;
 
   return (
-    <div className="relative w-full max-w-[620px] mx-auto select-none flex flex-col gap-4">
+    <div className="relative w-full max-w-[720px] mx-auto select-none flex flex-col gap-4">
       {/* Ambient Lighting Glow (Pointer Events None) */}
-      <div className="absolute -inset-6 bg-gradient-to-tr from-[#4F7CFF]/30 via-[#8B5CF6]/25 to-[#22D3EE]/20 rounded-[40px] blur-3xl opacity-75 -z-10 pointer-events-none" />
+      <div className="absolute -inset-6 bg-gradient-to-tr from-[#4F7CFF]/25 via-[#8B5CF6]/20 to-[#22D3EE]/15 rounded-[40px] blur-3xl opacity-75 -z-10 pointer-events-none" />
 
-      {/* 1. LARGE PROCESSED IMAGE PREVIEW CONTAINER */}
-      <div className="relative aspect-square w-full rounded-[24px] border-2 border-primary/45 bg-[#0E142A] shadow-[0_0_50px_rgba(79,124,255,0.3),0_16px_48px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col justify-between group">
-        {/* Top inner glass sheen */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-20 pointer-events-none" />
-
-        {/* Top Bar with Simple [ Before ] [ After ] Tabs */}
-        <div className="relative z-20 px-4 py-3 bg-[#0A0B1E]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            <span className="text-xs font-bold text-white tracking-wide">
-              {activeTab === "after" ? "Transparent PNG Preview" : "Original Source Image"}
+      {/* STATIC BEFORE / AFTER COMPARISON VIEW */}
+      {/* Desktop/Tablet: Side-by-Side (2 Columns) | Mobile/Android: Stacked (1 Column: Before on Top, After Below) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+        {/* 1. BEFORE CARD (Original Source) */}
+        <div className="relative aspect-square w-full rounded-[22px] border-2 border-white/10 bg-[#0E142A] shadow-[0_8px_32px_rgba(0,0,0,0.45)] overflow-hidden flex flex-col justify-between group">
+          {/* Top Bar with Clear "Before" Label */}
+          <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-pill bg-[#131A3A] border border-white/15 text-xs font-bold text-white shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-text-secondary" />
+              <span>Before</span>
+            </div>
+            <span className="text-[11px] font-medium text-text-muted">
+              Original Source
             </span>
           </div>
 
-          {/* Clean Segmented Tab Control */}
-          <div className="inline-flex rounded-pill bg-[#131A3A] p-0.5 border border-white/15 shadow-inner">
-            <button
-              type="button"
-              onClick={() => setActiveTab("before")}
-              className={`px-3.5 py-1 rounded-pill text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "before"
-                  ? "bg-white/20 text-white shadow-sm"
-                  : "text-text-secondary hover:text-white"
-              }`}
-            >
-              Before
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (isCutoutReady) setActiveTab("after");
-              }}
-              disabled={!isCutoutReady}
-              className={`px-3.5 py-1 rounded-pill text-xs font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                activeTab === "after"
-                  ? "bg-gradient-to-r from-primary to-secondary text-white shadow-[0_0_14px_rgba(79,124,255,0.7)]"
-                  : "text-text-secondary hover:text-white"
-              }`}
-            >
-              After
-            </button>
+          {/* Before Image Container */}
+          <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-[#0A0B1E]">
+            {originalUrl ? (
+              <img
+                src={originalUrl}
+                alt="Before - Original Source"
+                className={`w-full h-full select-none filter drop-shadow-sm transition-all duration-200 ${
+                  paddingPercent === 0
+                    ? "object-contain object-bottom"
+                    : "object-contain object-center"
+                }`}
+                style={
+                  paddingPercent > 0
+                    ? { padding: `${Math.round(paddingPercent * 0.12)}%` }
+                    : undefined
+                }
+                draggable={false}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center text-text-muted p-4 text-center">
+                <ImageIcon size={32} className="mb-1 opacity-50" />
+                <span className="text-xs">No image loaded</span>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Status Caption */}
+          <div className="relative z-20 px-3.5 py-2 bg-[#0A0B1E]/80 backdrop-blur-md border-t border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted font-mono">
+            <span>Original Image</span>
+            <span>Unedited</span>
           </div>
         </div>
 
-        {/* AI Processing Scanning Overlay */}
-        {isProcessing && (
-          <div className="absolute inset-0 z-30 bg-[#0A0B1E]/70 backdrop-blur-md flex flex-col items-center justify-center pointer-events-none">
-            <div className="w-14 h-14 rounded-full bg-primary/25 border border-primary flex items-center justify-center text-accent shadow-[0_0_30px_rgba(79,124,255,0.8)] mb-3 animate-spin">
-              <Loader2 size={28} />
-            </div>
-            <span className="text-sm font-semibold text-white tracking-wide">
-              AI Removing Background...
-            </span>
-          </div>
-        )}
+        {/* 2. AFTER CARD (AI Background Removed Cutout) */}
+        <div className="relative aspect-square w-full rounded-[22px] border-2 border-primary/45 bg-[#0E142A] shadow-[0_0_36px_rgba(79,124,255,0.25),0_12px_40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col justify-between group">
+          {/* Top inner glass sheen */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-20 pointer-events-none" />
 
-        {/* Main Full Image View Area (Maximized & Auto-Centered with Zero Obstructing Dividers) */}
-        <div
-          className={`relative flex-1 w-full h-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
-            activeTab === "after" && activePreset.id === "transparent"
-              ? "checkerboard-pattern"
-              : "bg-[#0A0B1E]"
-          }`}
-          style={
-            activeTab === "after" && activePreset.id !== "transparent"
-              ? { background: activePreset.value }
-              : undefined
-          }
-        >
-          {displayImage ? (
-            <img
-              key={`${displayImage}-${activeTab}`}
-              src={displayImage}
-              alt="CleanPix Image View"
-              className="w-full h-full object-contain select-none filter drop-shadow-md transition-all duration-200"
-              style={
-                activeTab === "after" && paddingPercent > 0
-                  ? { padding: `${paddingPercent}%` }
-                  : undefined
-              }
-              draggable={false}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center text-accent p-6 text-center">
-              <ImageIcon size={36} className="mb-2 opacity-60" />
-              <span className="text-xs text-text-secondary">Ready to process cutout</span>
+          {/* Top Bar with Clear "After" Label */}
+          <div className="relative z-20 px-3.5 py-2.5 bg-[#0A0B1E]/85 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-pill bg-gradient-to-r from-primary to-secondary border border-accent/40 text-xs font-bold text-white shadow-[0_0_12px_rgba(79,124,255,0.6)]">
+              <Sparkles size={11} className="text-accent" />
+              <span>{isHd ? "After (HD Enhanced)" : "After"}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="text-[11px] font-bold text-white">
+                {isHd
+                  ? "2x HD Enhanced"
+                  : activePreset.id === "transparent"
+                  ? "Alpha PNG"
+                  : activePreset.name}
+              </span>
+            </div>
+          </div>
+
+          {/* AI Processing Scanning Overlay */}
+          {isProcessing && (
+            <div className="absolute inset-0 z-30 bg-[#0A0B1E]/75 backdrop-blur-md flex flex-col items-center justify-center pointer-events-none">
+              <div className="w-12 h-12 rounded-full bg-primary/25 border border-primary flex items-center justify-center text-accent shadow-[0_0_24px_rgba(79,124,255,0.8)] mb-2.5 animate-spin">
+                <Loader2 size={24} />
+              </div>
+              <span className="text-xs font-semibold text-white tracking-wide">
+                AI Removing Background...
+              </span>
             </div>
           )}
-        </div>
 
-        {/* Bottom Status Pill inside Preview */}
-        <div className="relative z-20 px-4 py-2 bg-[#0A0B1E]/80 backdrop-blur-md border-t border-white/[0.08] flex items-center justify-between text-[11px] text-text-secondary font-mono">
-          <span>Format: <strong className="text-accent">{activeTab === "after" ? "PNG (Alpha Transparent)" : "Source"}</strong></span>
-          <span className="text-text-muted">Full View • 100% Lossless</span>
+          {/* After Image Container */}
+          <div
+            className={`relative flex-1 w-full h-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
+              activePreset.id === "transparent" ? "checkerboard-pattern" : "bg-[#0A0B1E]"
+            }`}
+            style={
+              activePreset.id !== "transparent"
+                ? { background: activePreset.value }
+                : undefined
+            }
+          >
+            {processedUrl ? (
+              <img
+                key={processedUrl}
+                src={processedUrl}
+                alt={isHd ? "After - AI Background Removed (HD Enhanced)" : "After - AI Background Removed"}
+                className={`w-full h-full select-none filter drop-shadow-md transition-all duration-200 ${
+                  paddingPercent === 0
+                    ? "object-contain object-bottom"
+                    : "object-contain object-center"
+                }`}
+                style={
+                  paddingPercent > 0
+                    ? { padding: `${Math.round(paddingPercent * 0.12)}%` }
+                    : undefined
+                }
+                draggable={false}
+              />
+            ) : isProcessing ? (
+              <div className="flex flex-col items-center justify-center text-accent p-4 text-center">
+                <Loader2 size={32} className="animate-spin mb-2 opacity-80" />
+                <span className="text-xs text-text-secondary">Processing cutout...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center text-accent p-4 text-center">
+                <ImageIcon size={32} className="mb-2 opacity-60" />
+                <span className="text-xs text-text-secondary">Ready to process cutout</span>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Status Pill inside Preview */}
+          <div className="relative z-20 px-3.5 py-2 bg-[#0A0B1E]/80 backdrop-blur-md border-t border-white/[0.08] flex items-center justify-between text-[10px] sm:text-[11px] text-text-secondary font-mono">
+            <span>
+              Format: <strong className="text-accent">{isHd ? "2x PNG (HD Alpha)" : activePreset.id === "transparent" ? "PNG (Alpha)" : "Preset"}</strong>
+            </span>
+            <span className="text-text-muted">{isHd ? "2x DPR Sharpened" : "100% Lossless"}</span>
+          </div>
         </div>
       </div>
 
@@ -171,7 +197,9 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
             </div>
             <div>
               <span className="font-bold text-white block">Copy Transparent PNG</span>
-              <span className="text-[11px] text-text-muted">Paste directly into WhatsApp, Canva, Photoshop, PowerPoint & Word</span>
+              <span className="text-[11px] text-text-muted">
+                Paste directly into WhatsApp, Canva, Photoshop, PowerPoint & Word
+              </span>
             </div>
           </div>
 

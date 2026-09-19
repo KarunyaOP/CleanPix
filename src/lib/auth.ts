@@ -95,14 +95,14 @@ export const authOptions: NextAuthOptions = {
         if (url.startsWith("/")) {
           // Check for malformed /http or /https nested strings (e.g. /https://...)
           if (url.startsWith("/http://") || url.startsWith("/https://")) {
-            const stripped = url.replace(/^\/https?:\/\/[^\/]+/, "") || "/dashboard";
+            const stripped = url.replace(/^\/https?:\/\/[^\/]+/, "") || "/";
             const cleanPath = stripped.startsWith("/") ? stripped : `/${stripped}`;
-            const finalUrl = `${baseUrl}${cleanPath === "/" ? "/dashboard" : cleanPath}`;
+            const finalUrl = `${baseUrl}${cleanPath === "/login" ? "/" : cleanPath}`;
             console.log("[NEXTAUTH_REDIRECT_SANITIZED_RELATIVE]", { from: url, to: finalUrl });
             return finalUrl;
           }
-          if (url === "/" || url === "" || url === "/login") {
-            return `${baseUrl}/dashboard`;
+          if (url === "/login") {
+            return `${baseUrl}/`;
           }
           return `${baseUrl}${url}`;
         }
@@ -123,15 +123,15 @@ export const authOptions: NextAuthOptions = {
             parsedUrl.pathname.startsWith("/http://") ||
             parsedUrl.pathname.startsWith("/https://")
           ) {
-            const stripped = parsedUrl.pathname.replace(/^\/https?:\/\/[^\/]+/, "") || "/dashboard";
+            const stripped = parsedUrl.pathname.replace(/^\/https?:\/\/[^\/]+/, "") || "/";
             const cleanPath = stripped.startsWith("/") ? stripped : `/${stripped}`;
-            const finalUrl = `${parsedBase.origin}${cleanPath === "/" ? "/dashboard" : cleanPath}${parsedUrl.search}${parsedUrl.hash}`;
+            const finalUrl = `${parsedBase.origin}${cleanPath === "/login" ? "/" : cleanPath}${parsedUrl.search}${parsedUrl.hash}`;
             console.log("[NEXTAUTH_REDIRECT_SANITIZED_ABSOLUTE]", { from: url, to: finalUrl });
             return finalUrl;
           }
 
-          if (parsedUrl.pathname === "/" || parsedUrl.pathname === "" || parsedUrl.pathname === "/login") {
-            return `${parsedBase.origin}/dashboard`;
+          if (parsedUrl.pathname === "/login") {
+            return `${parsedBase.origin}/`;
           }
 
           return url;
@@ -140,8 +140,8 @@ export const authOptions: NextAuthOptions = {
         console.error("[NEXTAUTH_REDIRECT_CALLBACK_ERROR]", { url, baseUrl, error: err });
       }
 
-      // Safe fallback
-      return `${baseUrl}/dashboard`;
+      // Safe fallback: CleanPix root home editor
+      return `${baseUrl}/`;
     },
     async jwt({ token, user, account, trigger, session }) {
       if (user) {

@@ -43,11 +43,11 @@ export async function POST(req: NextRequest) {
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const generatedSignature = hmac.digest("hex");
 
-    // 2. Validate cryptographic match using timing-safe comparison
-    const isSignatureValid = crypto.timingSafeEqual(
-      Buffer.from(generatedSignature, "utf-8"),
-      Buffer.from(razorpay_signature, "utf-8")
-    );
+    // 2. Validate cryptographic match using length-guarded timing-safe comparison
+    const genBuf = Buffer.from(generatedSignature, "utf-8");
+    const sigBuf = Buffer.from(razorpay_signature, "utf-8");
+    const isSignatureValid =
+      genBuf.length === sigBuf.length && crypto.timingSafeEqual(genBuf, sigBuf);
 
     if (!isSignatureValid) {
       console.error("[RAZORPAY_SIGNATURE_MISMATCH]", {

@@ -12,29 +12,41 @@ import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { FaqSection } from "@/components/marketing/FaqSection";
 import { Footer } from "@/components/layout/Footer";
+import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 
 export default function HomePage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const [showSplash, setShowSplash] = useState<boolean | null>(null);
-  const [viewMode, setViewMode] = useState<"login" | "home">("login");
+  const [isGuest, setIsGuest] = useState<boolean>(false);
+  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+
+  // Keep track of whether the main workspace has ever been active
+  const hasEverBeenActiveRef = React.useRef<boolean>(false);
 
   useEffect(() => {
-    // Check if splash has already been seen in this session
     try {
       const splashSeen = sessionStorage.getItem("cleanpix_splash_seen");
-      if (splashSeen === "true") {
+      const guestMode = sessionStorage.getItem("cleanpix_guest_mode") === "true";
+      if (guestMode) {
+        setIsGuest(true);
+      }
+
+      if (status === "authenticated" || guestMode) {
         setShowSplash(false);
-        setViewMode("home");
-      } else {
-        setShowSplash(true);
-        setViewMode("login");
+        setHasInitialized(true);
+      } else if (status === "unauthenticated") {
+        if (splashSeen === "true") {
+          setShowSplash(false);
+        } else {
+          setShowSplash((prev) => (prev === false ? false : true));
+        }
+        setHasInitialized(true);
       }
     } catch {
-      // In case sessionStorage is unavailable
       setShowSplash(false);
-      setViewMode("home");
+      setHasInitialized(true);
     }
-  }, []);
+  }, [status]);
 
   const handleSplashComplete = () => {
     try {
@@ -42,64 +54,73 @@ export default function HomePage() {
     } catch {
       // Ignore storage errors
     }
-
-    // If already authenticated, switch view mode to home; otherwise keep login
-    if (status === "authenticated") {
-      setViewMode("home");
-    } else {
-      setViewMode("login");
-    }
-    // Triggers smooth dissolution exit animation via AnimatePresence
     setShowSplash(false);
   };
 
   const handleContinueAsGuest = () => {
     try {
       sessionStorage.setItem("cleanpix_guest_mode", "true");
+      sessionStorage.setItem("cleanpix_splash_seen", "true");
     } catch {
       // Ignore
     }
-    setViewMode("home");
+    setIsGuest(true);
+    setShowSplash(false);
+    setHasInitialized(true);
   };
 
-  // 1. Initial hydration mount check
-  if (showSplash === null) {
-    return <div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />;
+  const isAccessAllowed = status === "authenticated" || isGuest || hasEverBeenActiveRef.current;
+
+  if (isAccessAllowed && (status === "authenticated" || isGuest)) {
+    hasEverBeenActiveRef.current = true;
   }
 
-  // 2. Login View with Pre-rendered Login Form and AnimatePresence Splash Exit
-  if (viewMode === "login" && status !== "authenticated") {
+  // 1. If access is granted (authenticated or guest), ALWAYS render the main app and NEVER unmount it
+  if (isAccessAllowed) {
     return (
-      <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 select-none overflow-hidden">
-        {/* Pre-rendered Login Form */}
-        <LoginForm
-          onContinueAsGuest={handleContinueAsGuest}
-          animateEntrance={true}
-        />
-
-        {/* Coordinated Splash Screen with AnimatePresence Exit */}
-        <AnimatePresence>
-          {showSplash && (
-            <SplashScreen
-              onComplete={handleSplashComplete}
-              durationMs={2550}
-            />
-          )}
-        </AnimatePresence>
+      <main className="flex-1 flex flex-col" id="top">
+        <Navbar />
+        <Hero />
+        <FeaturesSection />
+        <HowItWorksSection />
+        <PricingSection />
+        <FaqSection />
+        <Footer />
+        <InstallPromptBanner />
       </main>
     );
   }
 
-  // 3. Home Page: Full application (Navbar, Hero, Features, etc.)
+  // 2. While initial auth/splash state is resolving on first load:
+  // Do NOT treat the user as unauthenticated and never prematurely render the login form.
+  if (!hasInitialized || status === "loading" || showSplash === null) {
+    if (showSplash === true) {
+      return (
+        <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center select-none overflow-hidden">
+          <SplashScreen onComplete={handleSplashComplete} durationMs={2550} />
+        </main>
+      );
+    }
+    return <div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />;
+  }
+
+  // 3. User is unauthenticated and not in guest mode -> Render Login Form
   return (
-    <main className="flex-1 flex flex-col" id="top">
-      <Navbar />
-      <Hero />
-      <FeaturesSection />
-      <HowItWorksSection />
-      <PricingSection />
-      <FaqSection />
-      <Footer />
+    <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 select-none overflow-hidden">
+      <LoginForm
+        onContinueAsGuest={handleContinueAsGuest}
+        animateEntrance={true}
+      />
+
+      {/* Coordinated Splash Screen with AnimatePresence Exit */}
+      <AnimatePresence>
+        {showSplash && (
+          <SplashScreen
+            onComplete={handleSplashComplete}
+            durationMs={2550}
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }

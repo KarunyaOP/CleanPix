@@ -48,7 +48,7 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
   const [selectedPreset, setSelectedPreset] = useState<SmartBackgroundPreset>(
     initialPreset || TRANSPARENT_PRESET
   );
-  const [paddingPercent, setPaddingPercent] = useState<number>(8);
+  const [paddingPercent, setPaddingPercent] = useState<number>(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isZipping, setIsZipping] = useState<boolean>(false);
 
@@ -80,6 +80,13 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
     setDownloadingId(format.id);
     onNotify?.(`Generating ${format.name}...`, "info");
 
+    console.log("[SOCIAL_KIT_GENERATE]", {
+      background: selectedPreset.name,
+      presetId: selectedPreset.id,
+      paddingPercent,
+      format: format.id,
+    });
+
     try {
       await downloadSocialKitItem(
         imageUrl,
@@ -101,6 +108,13 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
     if (isZipping) return;
     setIsZipping(true);
     onNotify?.("Bundling all social kit formats into ZIP...", "info");
+
+    console.log("[SOCIAL_KIT_GENERATE_ALL_ZIP]", {
+      background: selectedPreset.name,
+      presetId: selectedPreset.id,
+      paddingPercent,
+      formats: SOCIAL_MEDIA_FORMATS.map((f) => f.id),
+    });
 
     try {
       await downloadSocialKitZip(
@@ -133,34 +147,43 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
     }
   };
 
+  const visualPadding =
+    paddingPercent === 0
+      ? 2
+      : paddingPercent === 50
+      ? 12
+      : paddingPercent === 100
+      ? 24
+      : Math.round((paddingPercent / 100) * 24);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col rounded-[24px] bg-[#0E142A]/95 border border-primary/40 shadow-[0_24px_64px_rgba(0,0,0,0.8),0_0_40px_rgba(79,124,255,0.25)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
+      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col rounded-[22px] sm:rounded-[24px] bg-[#0E142A]/95 border border-primary/40 shadow-[0_24px_64px_rgba(0,0,0,0.8),0_0_40px_rgba(79,124,255,0.25)] overflow-hidden">
         {/* Top Glow Sheen */}
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#131A3A]/80">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-chip bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_15px_rgba(79,124,255,0.4)]">
-              <Sparkles size={18} />
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-white/10 bg-[#131A3A]/80">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-chip bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_15px_rgba(79,124,255,0.4)] shrink-0">
+              <Sparkles size={16} />
             </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-heading font-bold text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-lg font-heading font-bold text-white flex items-center gap-1.5 sm:gap-2 truncate">
                 <span>Social Media Kit Generator</span>
-                <span className="px-2 py-0.5 rounded-pill bg-accent/15 border border-accent/40 text-[10px] font-bold text-accent">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-pill bg-accent/15 border border-accent/40 text-[9px] sm:text-[10px] font-bold text-accent shrink-0">
                   Phase 3 AI
                 </span>
               </h3>
-              <p className="text-xs text-text-secondary">
-                Auto-centered framing with smart proportional padding across all major platforms
+              <p className="text-[11px] sm:text-xs text-text-secondary truncate">
+                Auto-centered framing with smart proportional padding
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-btn text-text-secondary hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+            className="p-2 rounded-btn text-text-secondary hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer shrink-0 ml-2"
             aria-label="Close modal"
           >
             <X size={18} />
@@ -168,10 +191,10 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
         </div>
 
         {/* Modal Toolbar: Smart Background & Padding Controls */}
-        <div className="px-6 py-3.5 border-b border-white/[0.08] bg-[#0A0B1E]/90 flex flex-wrap items-center justify-between gap-4">
+        <div className="px-4 sm:px-6 py-3 border-b border-white/[0.08] bg-[#0A0B1E]/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           {/* Smart Background Presets */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <span className="text-xs font-semibold text-text-secondary flex items-center gap-1.5 shrink-0">
               <Layers size={13} className="text-accent" />
               <span>Background:</span>
             </span>
@@ -181,10 +204,11 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
                 return (
                   <button
                     key={preset.id}
+                    type="button"
                     onClick={() => setSelectedPreset(preset)}
                     className={`px-3 py-1 rounded-pill text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
                       isSelected
-                        ? "bg-primary text-white border border-accent/60 shadow-[0_0_12px_rgba(79,124,255,0.6)]"
+                        ? "bg-primary text-white border border-accent/60 shadow-[0_0_12px_rgba(79,124,255,0.6)] font-bold scale-[1.02]"
                         : "bg-white/[0.05] hover:bg-white/10 text-text-secondary hover:text-white border border-white/10"
                     }`}
                   >
@@ -204,19 +228,20 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
               <Sliders size={13} className="text-accent" />
               <span>Smart Padding:</span>
             </span>
-            <div className="inline-flex rounded-pill bg-[#131A3A] p-0.5 border border-white/10">
+            <div className="flex items-center gap-1.5 bg-[#131A3A] p-1 rounded-pill border border-white/10">
               {[
                 { label: "Fit (0%)", val: 0 },
-                { label: "Balanced (8%)", val: 8 },
-                { label: "Spacious (15%)", val: 15 },
+                { label: "Balanced (50%)", val: 50 },
+                { label: "Spacious (100%)", val: 100 },
               ].map((pad) => (
                 <button
                   key={pad.val}
+                  type="button"
                   onClick={() => setPaddingPercent(pad.val)}
-                  className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-pill text-[11px] font-semibold transition-all cursor-pointer ${
                     paddingPercent === pad.val
-                      ? "bg-accent text-[#0A0B1E] shadow-[0_0_10px_rgba(34,211,238,0.5)] font-bold"
-                      : "text-text-secondary hover:text-white"
+                      ? "bg-primary text-white shadow-[0_0_10px_rgba(79,124,255,0.6)] font-bold scale-[1.02]"
+                      : "text-text-secondary hover:text-white hover:bg-white/5"
                   }`}
                 >
                   {pad.label}
@@ -251,7 +276,11 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
 
                 {/* Canvas Live Visual Preview Card */}
                 <div
-                  className="relative w-full aspect-square rounded-[14px] overflow-hidden border border-white/15 flex items-center justify-center checkerboard-pattern"
+                  className={`relative w-full aspect-square rounded-[14px] overflow-hidden border border-white/15 flex items-center justify-center transition-all duration-300 ${
+                    selectedPreset.id === "transparent"
+                      ? "checkerboard-pattern"
+                      : "bg-[#0A0B1E]"
+                  }`}
                   style={
                     selectedPreset.id !== "transparent"
                       ? { background: selectedPreset.value }
@@ -261,10 +290,14 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
                   <img
                     src={imageUrl}
                     alt={format.name}
-                    className="w-full h-full object-contain filter drop-shadow-md transition-all duration-300"
-                    style={{
-                      padding: `${paddingPercent}%`,
-                    }}
+                    className={`w-full h-full filter drop-shadow-md transition-all duration-300 ${
+                      paddingPercent === 0 ? "object-contain object-bottom" : "object-contain object-center"
+                    }`}
+                    style={
+                      paddingPercent > 0
+                        ? { padding: `${visualPadding}%` }
+                        : undefined
+                    }
                   />
                   {/* Resolution Tag */}
                   <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-pill bg-black/75 backdrop-blur-sm text-[9px] font-mono text-white/80 border border-white/10">
@@ -302,17 +335,17 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-white/10 bg-[#0A0B1E]/95 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs text-text-secondary">
-            <Check size={14} className="text-status-success" />
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-white/10 bg-[#0A0B1E]/95 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 text-xs text-text-secondary text-center sm:text-left">
+            <Check size={14} className="text-status-success shrink-0" />
             <span>Lossless PNG rendering with crisp auto-centered alignment</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-btn text-xs font-medium text-text-secondary hover:text-white bg-white/[0.05] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-btn text-xs font-medium text-text-secondary hover:text-white bg-white/[0.05] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer min-h-[42px]"
             >
               Close
             </button>
@@ -322,7 +355,7 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
               type="button"
               onClick={handleDownloadAllZip}
               disabled={isZipping || Boolean(downloadingId)}
-              className="px-5 py-2.5 rounded-btn text-xs font-heading font-bold text-white bg-gradient-to-r from-accent via-primary to-secondary shadow-[0_0_24px_rgba(34,211,238,0.5)] hover:shadow-[0_0_32px_rgba(34,211,238,0.7)] hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-btn text-xs font-heading font-bold text-white bg-gradient-to-r from-accent via-primary to-secondary shadow-[0_0_24px_rgba(34,211,238,0.5)] hover:shadow-[0_0_32px_rgba(34,211,238,0.7)] hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 min-h-[42px]"
             >
               {isZipping ? (
                 <>
@@ -332,7 +365,7 @@ export const SocialMediaKitModal: React.FC<SocialMediaKitModalProps> = ({
               ) : (
                 <>
                   <Archive size={14} />
-                  <span>Download All Formats (.ZIP)</span>
+                  <span>Download All (.ZIP)</span>
                 </>
               )}
             </button>

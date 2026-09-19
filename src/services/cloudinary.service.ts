@@ -15,16 +15,19 @@ export interface BackgroundRemovalResult {
   height: number;
   format: string;
   provider: "cloudinary";
+  framing?: string;
 }
 
 export class CloudinaryService {
   /**
    * Upload an image to Cloudinary and execute real AI Background Removal (e_background_removal)
+   * with custom Framing composition (Fit 0%, Balanced 50%, Spacious 100%)
    */
   static async removeBackground(
     buffer: Buffer,
     fileName: string,
-    mimeType: string
+    mimeType: string,
+    framing: "fit" | "balanced" | "spacious" | string = "fit"
   ): Promise<BackgroundRemovalResult> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -72,31 +75,50 @@ export class CloudinaryService {
         height: uploadResult.height,
       });
 
-      // 3. Construct genuine Standard Cloudinary AI Background Removal transformed URL (e_background_removal)
+      // Normalize framing choice
+      const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
+      const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
+      const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
+
+      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge preservation
+      // Fit (0%): tight framing with fine edges
+      // Balanced (50%): 25% extra canvas with b_transparent,c_pad
+      // Spacious (100%): 50% extra canvas with b_transparent,c_pad
+      const standardTransformation = isSpacious
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
+        : isBalanced
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
+        : "e_background_removal:fineedges_y";
+
       const processedUrl = cloudinary.url(uploadResult.public_id, {
-        raw_transformation: "e_background_removal",
+        raw_transformation: standardTransformation,
         format: "png",
         secure: true,
         version: uploadResult.version,
       });
 
-      // 4. Construct HD Enhanced Cloudinary AI Background Removal transformed URL
-      // Transformations: e_background_removal + dpr_2.0 + e_sharpen + q_auto:best + format: png
+      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL (Fine Edges + 2x DPR + AI Sharpening + Improvement + Lossless Best Quality)
+      const hdTransformation = isSpacious
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+        : isBalanced
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_sharpen:100,e_improve,q_auto:best"
+        : "e_background_removal:fineedges_y/dpr_2.0,e_sharpen:100,e_improve,q_auto:best";
+
       const hdUrl = cloudinary.url(uploadResult.public_id, {
-        raw_transformation: "e_background_removal/dpr_2.0,e_sharpen,q_auto:best",
+        raw_transformation: hdTransformation,
         format: "png",
         secure: true,
         version: uploadResult.version,
       });
 
-      // 5. Construct raw original image URL for comparison slider (original background intact)
+      // 6. Construct raw original image URL for comparison slider (original background intact)
       const originalUrl = cloudinary.url(uploadResult.public_id, {
         secure: true,
         version: uploadResult.version,
         format: uploadResult.format,
       });
 
-      // 6. Server-side quick polling to verify processing status of standard cutout
+      // 7. Server-side quick polling to verify processing status of standard cutout
       await this.verifyOrPollCloudinaryUrl(processedUrl, 10, 1500);
 
       return {
@@ -111,6 +133,7 @@ export class CloudinaryService {
         height: uploadResult.height || 800,
         format: "png",
         provider: "cloudinary",
+        framing: normalizedFraming,
       };
     } catch (cloudinaryError: any) {
       console.error("[CLOUDINARY_API_ERROR]", cloudinaryError);
@@ -139,10 +162,18 @@ export class CloudinaryService {
   /**
    * Helper to generate HD URL dynamically from publicId & version
    */
-  static generateHdUrl(publicId: string, version?: number): string {
+  static generateHdUrl(publicId: string, version?: number, framing: string = "fit"): string {
     const cloudinary = getCloudinaryClient();
+    const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
+    const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
+    const padPrefix = isSpacious
+      ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
+      : isBalanced
+      ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
+      : "e_background_removal:fineedges_y";
+
     return cloudinary.url(publicId, {
-      raw_transformation: "e_background_removal/dpr_2.0,e_sharpen,q_auto:best",
+      raw_transformation: `${padPrefix}/dpr_2.0,e_sharpen:100,e_improve,q_auto:best`,
       format: "png",
       secure: true,
       version: version,

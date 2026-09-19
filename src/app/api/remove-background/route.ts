@@ -85,11 +85,30 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // 4. Process Background Removal via CloudinaryService
+      // 4. Extract framing parameter from request (fit, balanced, spacious)
+      const framingParam = (formData.get("framing") as string) || "";
+      const paddingParam = (formData.get("paddingPercent") as string) || "";
+      let framing: "fit" | "balanced" | "spacious" = "fit";
+      if (
+        framingParam.toLowerCase() === "spacious" ||
+        framingParam === "100" ||
+        paddingParam === "100"
+      ) {
+        framing = "spacious";
+      } else if (
+        framingParam.toLowerCase() === "balanced" ||
+        framingParam === "50" ||
+        paddingParam === "50"
+      ) {
+        framing = "balanced";
+      }
+
+      // 5. Process Background Removal via CloudinaryService with selected Framing
       const result = await CloudinaryService.removeBackground(
         buffer,
         file.name,
-        file.type || "image/png"
+        file.type || "image/png",
+        framing
       );
 
       // 5. Query updated credit balance for response

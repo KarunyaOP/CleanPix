@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
-import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 import { getMetadataBase, getSiteUrl } from "@/lib/siteUrl";
 
 export const viewport: Viewport = {
@@ -95,22 +94,16 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="bg-[#0A0B1E] text-[#F8FAFC] antialiased min-h-screen relative overflow-x-hidden font-sans selection:bg-primary/40 selection:text-white">
-        {/* Layered Ambient Glowing Background Lighting Mesh */}
+        {/* Subtle Ambient Background Mesh */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-          {/* Top-Left Electric Blue Orb */}
-          <div className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full bg-[#4F7CFF]/28 blur-[140px] animate-blob-drift" />
+          {/* Top-Left Blue Ambient Light */}
+          <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-[#4F7CFF]/10 blur-[140px]" />
           
-          {/* Top-Right & Middle Purple Orb */}
-          <div className="absolute top-[10%] -right-32 w-[750px] h-[750px] rounded-full bg-[#8B5CF6]/25 blur-[150px] animate-blob-drift-delayed" />
+          {/* Top-Right Purple Ambient Light */}
+          <div className="absolute top-[10%] -right-40 w-[600px] h-[600px] rounded-full bg-[#8B5CF6]/8 blur-[150px]" />
           
-          {/* Center-Right Intense Cyan/Blue Glow behind Hero Frame */}
-          <div className="absolute top-[25%] right-[15%] w-[500px] h-[500px] rounded-full bg-[#22D3EE]/16 blur-[110px]" />
-          
-          {/* Bottom-Left Ambient Violet Pool */}
-          <div className="absolute -bottom-32 left-[10%] w-[650px] h-[650px] rounded-full bg-[#6366F1]/18 blur-[130px]" />
-          
-          {/* Deep Vignette Edge Shadows */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,#05060F_85%)] opacity-60" />
+          {/* Bottom Ambient Vignette */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,#05060F_90%)] opacity-70" />
         </div>
 
         {/* PWA Lifecycle & Connectivity Handler */}
@@ -122,9 +115,6 @@ export default function RootLayout({
             {children}
           </div>
         </AuthProvider>
-
-        {/* Android & Mobile Install Prompt Banner */}
-        <InstallPromptBanner />
       </body>
     </html>
   );

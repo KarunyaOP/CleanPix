@@ -31,6 +31,7 @@ export interface LeftColumnResultsProps {
   isHdReady: boolean;
   isEnhancingHd: boolean;
   hdError: string | null;
+  error?: { code: string; message: string; details?: string } | null;
   onBack: () => void;
   onChangeImage: () => void;
   onRemoveImage?: () => void;
@@ -39,6 +40,7 @@ export interface LeftColumnResultsProps {
   onEnhanceHd: () => void;
   onDownloadHd: () => void;
   onOpenSocialKit: () => void;
+  onClearError?: () => void;
 }
 
 export const LeftColumnResults: React.FC<LeftColumnResultsProps> = ({
@@ -53,6 +55,7 @@ export const LeftColumnResults: React.FC<LeftColumnResultsProps> = ({
   isHdReady,
   isEnhancingHd,
   hdError,
+  error,
   onBack,
   onChangeImage,
   onRemoveImage,
@@ -61,6 +64,7 @@ export const LeftColumnResults: React.FC<LeftColumnResultsProps> = ({
   onEnhanceHd,
   onDownloadHd,
   onOpenSocialKit,
+  onClearError,
 }) => {
   const isCutoutReady = !isUploading && !isProcessingAI && Boolean(processedUrl);
   const baseWidth = dimensions?.width || 1200;
@@ -182,8 +186,45 @@ export const LeftColumnResults: React.FC<LeftColumnResultsProps> = ({
           </div>
         )}
 
-        {/* Initial Remove Background CTA if not started */}
-        {!processedUrl && !isProcessingAI && !isUploading && (
+        {/* Error Box & Try Again CTA */}
+        {error && !isProcessingAI && !isUploading && (
+          <div className="w-full p-3.5 rounded-[14px] bg-red-500/15 border border-red-500/40 text-red-200 flex flex-col gap-2.5 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+              <div className="flex-1 text-xs">
+                <span className="font-bold text-red-100 block">
+                  {error.message || "Background removal failed. Please try again."}
+                </span>
+                {error.details && (
+                  <span className="text-[11px] text-red-300/80 block mt-0.5">
+                    {error.details}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onRemoveBackground}
+                className="flex-1 py-2 px-3 rounded-btn text-xs font-heading font-bold text-white bg-gradient-to-r from-primary to-secondary hover:shadow-[0_0_16px_rgba(79,124,255,0.6)] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw size={13} className="text-accent" />
+                <span>Try Again</span>
+              </button>
+              <button
+                type="button"
+                onClick={onChangeImage}
+                className="py-2 px-3 rounded-btn text-xs font-semibold text-text-secondary hover:text-white bg-white/[0.08] hover:bg-white/15 border border-white/15 transition-all flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <span>Change Image</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Initial Remove Background CTA if not started and no error */}
+        {!processedUrl && !isProcessingAI && !isUploading && !error && (
           <button
             type="button"
             onClick={onRemoveBackground}
