@@ -411,46 +411,47 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
 
       {/* Header Bar */}
       <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#0A0B1E]/85 backdrop-blur-2xl">
-        <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 h-16 sm:h-20 flex items-center justify-between gap-2 min-w-0">
           {/* Brand and Single Clear Back Navigation */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2.5 sm:gap-6 min-w-0 shrink">
             <Link
               href="/"
-              className="flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-white transition-colors group"
+              className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-white transition-colors group shrink-0"
             >
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              <span>Back to Editor</span>
+              <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform shrink-0" />
+              <span className="hidden sm:inline">Back to Editor</span>
+              <span className="sm:hidden">Back</span>
             </Link>
 
-            <div className="h-5 w-px bg-white/10 hidden sm:block" />
+            <div className="h-5 w-px bg-white/10 hidden sm:block shrink-0" />
 
-            <Link href="/" className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
               <img
                 src="/branding/logo/cleanpix-icon.svg"
                 alt="CleanPix Icon"
-                className="w-8 h-8 object-contain drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]"
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]"
               />
-              <span className="font-heading font-bold text-xl text-white tracking-tight hidden sm:inline">
+              <span className="font-heading font-bold text-lg sm:text-xl text-white tracking-tight hidden sm:inline">
                 Clean<span className="bg-gradient-to-r from-[#38BDF8] via-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Pix</span>
               </span>
             </Link>
           </div>
 
           {/* Right Header Actions: Refresh & Delete All */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* REFRESH BUTTON */}
             <button
               type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-btn font-heading font-semibold text-xs text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/18 hover:border-primary/50 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-btn font-heading font-semibold text-xs text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/18 hover:border-primary/50 shadow-sm transition-all cursor-pointer disabled:opacity-50 shrink-0"
               title="Re-fetch latest project records from the database"
             >
               <RefreshCw
                 size={13}
-                className={`text-accent ${isRefreshing ? "animate-spin" : ""}`}
+                className={`text-accent shrink-0 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+              <span className="hidden xs:inline">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
 
             {/* DELETE ALL ACTION BUTTON */}
@@ -458,18 +459,19 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDeleteAllOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-btn text-xs font-semibold text-red-300 hover:text-white bg-red-500/10 hover:bg-red-500/25 border border-red-500/25 hover:border-red-500/40 transition-all cursor-pointer shadow-sm"
+                className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-btn text-xs font-semibold text-red-300 hover:text-white bg-red-500/10 hover:bg-red-500/25 border border-red-500/25 hover:border-red-500/40 transition-all cursor-pointer shadow-sm shrink-0"
                 title="Permanently remove all your history records"
               >
                 <Trash2 size={13} />
-                <span>Delete All</span>
+                <span className="hidden xs:inline">Delete All</span>
+                <span className="xs:hidden">Delete</span>
               </button>
             )}
 
             {/* Account / User Pill */}
             {(session?.user || initialUser) && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-[#131A3A] border border-primary/30">
-                <span className="text-xs font-semibold text-white truncate max-w-[140px]">
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-[#131A3A] border border-primary/30 shrink-0">
+                <span className="text-xs font-semibold text-white truncate max-w-[120px]">
                   {userName}
                 </span>
                 <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${
@@ -485,15 +487,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
                     ? "Business"
                     : "Free"}
                 </span>
-                {["pro", "business", "enterprise"].includes(userPlan.toLowerCase()) ? (
-                  <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent">
-                    Unlimited
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent">
-                    {userCredits} credits
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -501,18 +494,18 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       </header>
 
       {/* Main Container */}
-      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 py-10 flex-1 flex flex-col">
+      <div className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col w-full min-w-0 max-w-full overflow-x-hidden">
         {/* Page Title Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(34,211,238,0.4)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 w-full min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-1 flex-wrap">
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(34,211,238,0.4)] shrink-0">
                 <History size={15} className="text-accent" />
               </div>
-              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-white tracking-tight">
+              <h1 className="font-heading font-extrabold text-xl sm:text-3xl text-white tracking-tight break-words">
                 Processing History
               </h1>
-              <span className="px-2.5 py-0.5 rounded-pill bg-white/[0.06] border border-white/10 text-xs font-mono font-semibold text-accent">
+              <span className="px-2.5 py-0.5 rounded-pill bg-white/[0.06] border border-white/10 text-xs font-mono font-semibold text-accent shrink-0">
                 {projects.length} {projects.length === 1 ? "cutout" : "cutouts"}
               </span>
             </div>
@@ -521,19 +514,19 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto shrink-0">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-btn text-xs font-semibold text-text-secondary hover:text-white bg-[#131A3A] border border-white/15 hover:border-white/30 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none justify-center inline-flex items-center gap-1.5 px-3.5 py-2 sm:py-2.5 rounded-btn text-xs font-semibold text-text-secondary hover:text-white bg-[#131A3A] border border-white/15 hover:border-white/30 transition-all cursor-pointer"
             >
               <Layers size={14} />
               <span>Dashboard</span>
             </Link>
             <Link
               href="/"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn font-heading font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-primary to-secondary shadow-[0_0_20px_rgba(79,124,255,0.5)] hover:shadow-[0_0_30px_rgba(79,124,255,0.75)] hover:-translate-y-0.5 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none justify-center inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 sm:py-2.5 rounded-btn font-heading font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-primary to-secondary shadow-[0_0_20px_rgba(79,124,255,0.5)] hover:shadow-[0_0_30px_rgba(79,124,255,0.75)] hover:-translate-y-0.5 transition-all cursor-pointer"
             >
-              <UploadCloud size={16} />
+              <UploadCloud size={15} />
               <span>New Upload</span>
             </Link>
           </div>
@@ -541,9 +534,9 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
 
         {/* Clean Search Toolbar */}
         {projects.length > 0 && (
-          <div className="flex items-center justify-between gap-4 mb-6 p-3 sm:p-4 rounded-[18px] bg-[#131A3A]/70 border border-white/10 backdrop-blur-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 p-3 sm:p-4 rounded-[18px] bg-[#131A3A]/70 border border-white/10 backdrop-blur-xl w-full min-w-0">
             {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 w-full max-w-full sm:max-w-md">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"

@@ -181,7 +181,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         duration: shouldReduceMotion ? 0.3 : 0.55,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="w-full max-w-[440px] rounded-[28px] bg-[#131A3A]/90 backdrop-blur-2xl border border-primary/35 p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_30px_rgba(79,124,255,0.2)] flex flex-col gap-6"
+      className="w-full max-w-[440px] rounded-[28px] bg-[#131A3A]/90 backdrop-blur-2xl border border-primary/35 p-4.5 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_30px_rgba(79,124,255,0.2)] flex flex-col gap-5 sm:gap-6"
     >
       {/* Brand Header */}
       <div className="flex flex-col items-center text-center gap-3">

@@ -333,52 +333,53 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
       {/* Dashboard Top Header Navigation */}
       <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#0A0B1E]/90 backdrop-blur-md">
-        <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 h-16 sm:h-20 flex items-center justify-between gap-2 min-w-0">
           {/* Left: Back to Editor & Brand Logo */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2.5 sm:gap-6 min-w-0 shrink">
             <Link
               href="/"
-              className="flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-white transition-colors group"
+              className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-white transition-colors group shrink-0"
             >
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              <span>Back to Editor</span>
+              <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform shrink-0" />
+              <span className="hidden sm:inline">Back to Editor</span>
+              <span className="sm:hidden">Back</span>
             </Link>
 
-            <div className="h-5 w-px bg-white/10 hidden sm:block" />
+            <div className="h-5 w-px bg-white/10 hidden sm:block shrink-0" />
 
-            <Link href="/" className="flex items-center gap-3 group select-none">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group select-none shrink-0">
               <img
                 src="/branding/logo/cleanpix-icon.svg"
                 alt="CleanPix Icon"
-                className="w-8 h-8 object-contain group-hover:scale-105 transition-transform"
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain group-hover:scale-105 transition-transform shrink-0"
               />
-              <span className="font-heading font-bold text-xl text-white tracking-tight hidden sm:inline">
+              <span className="font-heading font-bold text-lg sm:text-xl text-white tracking-tight hidden sm:inline">
                 Clean<span className="bg-gradient-to-r from-[#38BDF8] via-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Pix</span>
               </span>
             </Link>
           </div>
 
           {/* Right Header: Refresh Action & Editor Button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-btn font-heading font-semibold text-xs text-white bg-[#131A3A] hover:bg-[#1B2350] border border-white/15 transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-btn font-heading font-semibold text-xs text-white bg-[#131A3A] hover:bg-[#1B2350] border border-white/15 transition-all cursor-pointer disabled:opacity-50 shrink-0"
               title="Refresh database records"
             >
               <RefreshCw
                 size={13}
-                className={`text-accent ${isRefreshing ? "animate-spin" : ""}`}
+                className={`text-accent shrink-0 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+              <span className="hidden xs:inline">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
 
             <Link
               href="/"
-              className="px-4 py-2 rounded-btn font-heading font-semibold text-xs text-white bg-gradient-to-r from-primary to-secondary shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-btn font-heading font-semibold text-xs text-white bg-gradient-to-r from-primary to-secondary shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
             >
-              <UploadCloud size={14} />
+              <UploadCloud size={14} className="shrink-0" />
               <span>New Cutout</span>
             </Link>
           </div>
@@ -386,31 +387,31 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       </header>
 
       {/* Main Dashboard Body */}
-      <main className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 py-8 sm:py-10 flex-1 flex flex-col gap-8">
+      <main className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col gap-6 sm:gap-8 w-full min-w-0 max-w-full overflow-x-hidden">
         {/* User Profile / Welcome Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-7 rounded-[22px] bg-[#131A3A]/80 border border-white/10 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-7 rounded-[22px] bg-[#131A3A]/80 border border-white/10 shadow-sm w-full min-w-0">
           {/* Avatar & User Details */}
-          <div className="flex items-center gap-4 sm:gap-5">
+          <div className="flex items-center gap-3.5 sm:gap-5 min-w-0 w-full">
             {user.image ? (
               <img
                 src={user.image}
                 alt={user.name || "User Avatar"}
                 referrerPolicy="no-referrer"
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border border-white/15 object-cover shrink-0"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border border-white/15 object-cover shrink-0"
               />
             ) : (
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border border-primary/30 bg-primary/15 flex items-center justify-center text-xl font-bold text-accent shrink-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border border-primary/30 bg-primary/15 flex items-center justify-center text-lg sm:text-xl font-bold text-accent shrink-0">
                 {user.name ? user.name.charAt(0).toUpperCase() : "U"}
               </div>
             )}
 
-            <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="font-heading font-bold text-xl sm:text-2xl text-white tracking-tight truncate">
+            <div className="flex flex-col gap-1 min-w-0 flex-1">
+              <h1 className="font-heading font-bold text-lg sm:text-2xl text-white tracking-tight break-words">
                 Welcome back, {user.name || user.email?.split("@")[0] || "Creator"}!
               </h1>
-              <div className="flex items-center gap-2 flex-wrap text-xs sm:text-sm text-text-secondary">
-                <span className="truncate max-w-[200px] sm:max-w-none">{user.email}</span>
-                <span className="text-white/20">•</span>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs sm:text-sm text-text-secondary min-w-0">
+                <span className="break-all">{user.email}</span>
+                <span className="text-white/20 hidden xs:inline">•</span>
                 {isBusinessPlan ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-semibold text-amber-300">
                     <Building2 size={11} />
@@ -431,7 +432,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap self-stretch sm:self-auto w-full sm:w-auto shrink-0">
             {isFreePlan && (
               <button
                 type="button"
@@ -439,7 +440,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                   setUpgradeModalPlan("pro");
                   setIsUpgradeModalOpen(true);
                 }}
-                className="px-4 py-2 rounded-btn bg-gradient-to-r from-primary to-secondary text-xs font-semibold text-white shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2 rounded-btn bg-gradient-to-r from-primary to-secondary text-xs font-semibold text-white shadow-sm hover:opacity-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Zap size={13} />
                 <span>Upgrade Plan</span>
@@ -453,7 +454,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                   setUpgradeModalPlan("business");
                   setIsUpgradeModalOpen(true);
                 }}
-                className="px-4 py-2 rounded-btn bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/35 text-xs font-semibold text-amber-300 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2 rounded-btn bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/35 text-xs font-semibold text-amber-300 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Building2 size={13} />
                 <span>Upgrade to Business</span>
@@ -463,23 +464,23 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="px-4 py-2 rounded-btn bg-white/[0.06] hover:bg-white/[0.1] border border-white/12 text-xs font-semibold text-white transition-colors flex items-center gap-2 cursor-pointer"
+              className="flex-1 sm:flex-none px-4 py-2 rounded-btn bg-white/[0.06] hover:bg-white/[0.1] border border-white/12 text-xs font-semibold text-white transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sliders size={13} className="text-accent" />
-              <span>Account Settings</span>
+              <span>Settings</span>
             </button>
           </div>
         </div>
 
         {/* 1. Metric Cards Section */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5 w-full min-w-0">
           {/* Card 1: Total Projects */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-5 sm:p-6 flex flex-col justify-between gap-4 shadow-sm hover:border-white/20 transition-all">
+          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 Total Projects
               </span>
-              <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-accent">
+              <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-accent shrink-0">
                 <Layers size={17} />
               </div>
             </div>
@@ -495,12 +496,12 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           </div>
 
           {/* Card 2: Total Images Processed */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-5 sm:p-6 flex flex-col justify-between gap-4 shadow-sm hover:border-white/20 transition-all">
+          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 Images Processed
               </span>
-              <div className="w-9 h-9 rounded-full bg-secondary/15 border border-secondary/30 flex items-center justify-center text-[#C084FC]">
+              <div className="w-9 h-9 rounded-full bg-secondary/15 border border-secondary/30 flex items-center justify-center text-[#C084FC] shrink-0">
                 <Sparkles size={17} />
               </div>
             </div>
@@ -516,17 +517,17 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           </div>
 
           {/* Card 3: Credits Remaining */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-5 sm:p-6 flex flex-col justify-between gap-4 shadow-sm hover:border-white/20 transition-all">
+          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 Credits Remaining
               </span>
-              <div className="w-9 h-9 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
+              <div className="w-9 h-9 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
                 <Zap size={17} />
               </div>
             </div>
 
-            <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <div>
                 <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
                   {["pro", "business", "enterprise"].includes(userPlan.toLowerCase())
@@ -568,82 +569,82 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         </section>
 
         {/* 2. Quick Actions Section */}
-        <section className="space-y-3.5">
+        <section className="space-y-3.5 w-full min-w-0">
           <h2 className="font-heading font-bold text-base sm:text-lg text-white flex items-center gap-2">
             <Sparkles size={15} className="text-accent" />
             <span>Quick Actions</span>
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
             {/* Quick Action 1: Upload New Image */}
             <Link
               href="/"
-              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-primary/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer"
+              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-primary/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer w-full min-w-0"
             >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-[12px] bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform shrink-0">
-                  <UploadCloud size={20} />
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[12px] bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform shrink-0">
+                  <UploadCloud size={18} />
                 </div>
-                <div>
-                  <h3 className="font-heading font-bold text-sm text-white">
+                <div className="min-w-0">
+                  <h3 className="font-heading font-bold text-sm text-white truncate">
                     Upload New Image
                   </h3>
-                  <p className="text-[11px] text-text-secondary">
+                  <p className="text-[11px] text-text-secondary truncate">
                     Launch AI background remover
                   </p>
                 </div>
               </div>
-              <ArrowRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0" />
+              <ArrowRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
             </Link>
 
             {/* Quick Action 2: View History */}
             <Link
               href="/history"
-              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-accent/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer"
+              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-accent/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer w-full min-w-0"
             >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-[12px] bg-primary/15 border border-primary/30 flex items-center justify-center text-accent group-hover:scale-105 transition-transform shrink-0">
-                  <History size={20} />
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[12px] bg-primary/15 border border-primary/30 flex items-center justify-center text-accent group-hover:scale-105 transition-transform shrink-0">
+                  <History size={18} />
                 </div>
-                <div>
-                  <h3 className="font-heading font-bold text-sm text-white">
-                    View Processing History
+                <div className="min-w-0">
+                  <h3 className="font-heading font-bold text-sm text-white truncate">
+                    View History
                   </h3>
-                  <p className="text-[11px] text-text-secondary">
+                  <p className="text-[11px] text-text-secondary truncate">
                     Browse past cutouts &amp; exports
                   </p>
                 </div>
               </div>
-              <ArrowRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0" />
+              <ArrowRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
             </Link>
 
             {/* Quick Action 3: Settings */}
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-secondary/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer text-left"
+              className="group rounded-[18px] bg-[#131A3A]/70 hover:bg-[#182350] border border-white/10 hover:border-secondary/40 p-4 sm:p-5 flex items-center justify-between transition-all shadow-sm cursor-pointer text-left w-full min-w-0"
             >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-[12px] bg-secondary/15 border border-secondary/30 flex items-center justify-center text-[#C084FC] group-hover:scale-105 transition-transform shrink-0">
-                  <Sliders size={20} />
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[12px] bg-secondary/15 border border-secondary/30 flex items-center justify-center text-[#C084FC] group-hover:scale-105 transition-transform shrink-0">
+                  <Sliders size={18} />
                 </div>
-                <div>
-                  <h3 className="font-heading font-bold text-sm text-white">
-                    Settings &amp; Account
+                <div className="min-w-0">
+                  <h3 className="font-heading font-bold text-sm text-white truncate">
+                    Account &amp; Settings
                   </h3>
-                  <p className="text-[11px] text-text-secondary">
-                    Preferences, plan benefits &amp; exports
+                  <p className="text-[11px] text-text-secondary truncate">
+                    Preferences &amp; plan benefits
                   </p>
                 </div>
               </div>
-              <ChevronRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0" />
+              <ChevronRight size={15} className="text-accent group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
             </button>
           </div>
         </section>
 
         {/* 3. Recent Activity Section (Latest 5 Projects) */}
-        <section className="space-y-3.5">
-          <div className="flex items-center justify-between">
+        <section className="space-y-3.5 w-full min-w-0">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <h2 className="font-heading font-bold text-base sm:text-lg text-white flex items-center gap-2">
                 <Clock size={15} className="text-accent" />
@@ -664,15 +665,15 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           </div>
 
           {recentProjects.length > 0 ? (
-            <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 overflow-hidden shadow-sm divide-y divide-white/[0.06]">
+            <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 overflow-hidden shadow-sm divide-y divide-white/[0.06] w-full min-w-0">
               {recentProjects.map((project) => (
                 <div
                   key={project.id}
-                  className="p-4 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-white/[0.02] transition-colors"
+                  className="p-3.5 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-white/[0.02] transition-colors w-full min-w-0"
                 >
                   {/* Left: Thumbnail & Project Meta */}
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-12 h-12 rounded-[10px] checkerboard-pattern border border-white/15 overflow-hidden shrink-0 flex items-center justify-center p-0.5 relative">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-[10px] checkerboard-pattern border border-white/15 overflow-hidden shrink-0 flex items-center justify-center p-0.5 relative">
                       <img
                         src={project.processedUrl || project.originalUrl}
                         alt="Project Cutout"
@@ -682,9 +683,9 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                       />
                     </div>
 
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[160px] sm:max-w-xs">
                           {project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`}
                         </h4>
                         <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-[10px] font-semibold text-accent uppercase">
@@ -699,7 +700,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                   </div>
 
                   {/* Right: Status Pill & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap shrink-0 pt-1 sm:pt-0 border-t border-white/[0.04] sm:border-0">
                     {/* Status Badge */}
                     <span
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -730,7 +731,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
                     {/* Quick Copy, Download & Delete */}
                     {project.processedUrl && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleCopy(project.id, project.processedUrl!)}
@@ -745,7 +746,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                           ) : (
                             <>
                               <Copy size={12} />
-                              <span>Copy</span>
+                              <span className="hidden xs:inline">Copy</span>
                             </>
                           )}
                         </button>

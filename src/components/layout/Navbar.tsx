@@ -35,20 +35,48 @@ export const Navbar: React.FC = () => {
     if (typeof document !== "undefined") {
       document.body.style.removeProperty("overflow");
       document.documentElement.style.removeProperty("overflow");
+      document.body.style.removeProperty("touch-action");
     }
   }, []);
 
-  // Ensure scroll is restored on route change
-  useEffect(() => {
+  const closeMobileMenu = useCallback(() => {
     setMobileMenuOpen(false);
-    setUserDropdownOpen(false);
     unlockBodyScroll();
-  }, [pathname, unlockBodyScroll]);
+  }, [unlockBodyScroll]);
+
+  // Ensure scroll is restored on route change and mobile menu closes
+  useEffect(() => {
+    closeMobileMenu();
+    setUserDropdownOpen(false);
+  }, [pathname, closeMobileMenu]);
+
+  // Window resize handler: auto-close mobile menu when scaling up to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== "undefined" && window.innerWidth >= 768) {
+        closeMobileMenu();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [closeMobileMenu]);
+
+  // Escape key handler: close mobile menu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && mobileMenuOpen) {
+        closeMobileMenu();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileMenuOpen, closeMobileMenu]);
 
   // Lock body scrolling ONLY while mobile menu is open, restore cleanly on close/unmount
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = "hidden";
+      document.body.style.touchAction = "none";
       return () => {
         unlockBodyScroll();
       };
@@ -360,11 +388,8 @@ export const Navbar: React.FC = () => {
         {mobileMenuOpen && (
           <>
             <div
-              className="fixed inset-0 top-[68px] bg-black/60 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-150"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                unlockBodyScroll();
-              }}
+              className="fixed inset-0 top-[68px] bg-black/60 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-150 pointer-events-auto"
+              onClick={closeMobileMenu}
               aria-hidden="true"
             />
             <div className="relative z-50 md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 max-h-[calc(100dvh-68px)] overflow-y-auto overscroll-contain">
@@ -424,10 +449,7 @@ export const Navbar: React.FC = () => {
                     {/* 1. Dashboard (Mobile) */}
                     <Link
                       href="/dashboard"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        unlockBodyScroll();
-                      }}
+                      onClick={closeMobileMenu}
                       className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-primary/20 border border-primary/30 flex items-center gap-2 cursor-pointer"
                     >
                       <LayoutDashboard size={14} className="text-accent" />
@@ -438,8 +460,7 @@ export const Navbar: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setMobileMenuOpen(false);
-                        unlockBodyScroll();
+                        closeMobileMenu();
                         setIsHistoryModalOpen(true);
                       }}
                       className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
@@ -452,8 +473,7 @@ export const Navbar: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setMobileMenuOpen(false);
-                        unlockBodyScroll();
+                        closeMobileMenu();
                         setIsSettingsModalOpen(true);
                       }}
                       className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
@@ -466,8 +486,7 @@ export const Navbar: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setMobileMenuOpen(false);
-                        unlockBodyScroll();
+                        closeMobileMenu();
                         try {
                           sessionStorage.removeItem("cleanpix_guest_mode");
                         } catch {}
@@ -483,10 +502,7 @@ export const Navbar: React.FC = () => {
                   /* Mobile Guest Menu (ONLY when status === "unauthenticated") */
                   <Link
                     href="/login"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      unlockBodyScroll();
-                    }}
+                    onClick={closeMobileMenu}
                     className="w-full py-3 rounded-btn text-sm font-semibold text-center text-white bg-[#131A3A] border border-white/20 hover:bg-[#1B2350] hover:border-primary/40 cursor-pointer"
                   >
                     Log In
