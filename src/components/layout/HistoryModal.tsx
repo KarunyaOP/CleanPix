@@ -56,33 +56,47 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     }
 
     try {
-      // 1. Fetch from /api/projects for authenticated user
-      const emailQuery = session?.user?.email ? `?userEmail=${encodeURIComponent(session.user.email)}` : "";
-      const res = await fetch(`/api/projects${emailQuery}`, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
-        },
-      });
+      const userEmail = session?.user?.email || "";
+      const userId = session?.user?.id || "";
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          const mapped: HistoryItem[] = data.projects.map((p: any) => ({
-            id: p.id,
-            originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-            cutoutUrl: p.processedUrl || p.originalUrl,
-            timestamp: new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-          }));
-          setHistoryItems(mapped);
-          if (isManualRefresh) showToast("History refreshed from database.");
-          return;
+      // 1. Fetch from /api/projects for authenticated user
+      if (userEmail || userId) {
+        const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+        const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+        const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+        const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Cache-Control": "no-cache",
+            ...(userEmail ? { "x-user-email": userEmail } : {}),
+            ...(userId ? { "x-user-id": userId } : {}),
+          },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.projects)) {
+            const mapped: HistoryItem[] = data.projects.map((p: any) => ({
+              id: p.id,
+              originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
+              cutoutUrl: p.processedUrl || p.originalUrl,
+              timestamp: new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
+            }));
+            setHistoryItems(mapped);
+            if (isManualRefresh) showToast("History refreshed from database.");
+            return;
+          }
         }
+
+        setHistoryItems([]);
+        if (isManualRefresh) showToast("History is up to date.");
+        return;
       }
 
-      // 2. Fallback to localStorage
+      // 2. Fallback to localStorage only for unauthenticated guest
       const stored = localStorage.getItem("cleanpix_cutout_history");
       if (stored) {
         try {
@@ -103,7 +117,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     } finally {
       setIsRefreshing(false);
     }
-  }, [session?.user?.email]);
+  }, [session?.user?.email, session?.user?.id]);
 
   useEffect(() => {
     if (isOpen) {
@@ -201,11 +215,17 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   const handleDeleteItem = async (id: string) => {
     try {
-      const emailQuery = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
-      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
+      const userEmail = session?.user?.email || "";
+      const userId = session?.user?.id || "";
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
+
+      const res = await fetch(`/api/projects?${queryString}`, {
         method: "DELETE",
         headers: {
-          ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -217,20 +237,23 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
       // 1. Confirmed deletion: update UI
       setHistoryItems((prev) => prev.filter((item) => item.id !== id));
 
-      // 2. Dispatch event to notify HistoryClient and Dashboard
+      // 2. Dispatch events to notify HistoryClient and Dashboard
       window.dispatchEvent(
         new CustomEvent("cleanpix_project_deleted", { detail: { id } })
       );
+      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
 
-      // 3. Clear from localStorage
-      try {
-        const stored = localStorage.getItem("cleanpix_cutout_history");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          const filtered = parsed.filter((item: any) => item.id !== id);
-          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-        }
-      } catch {}
+      // 3. Clear from localStorage only if guest
+      if (!userEmail && !userId) {
+        try {
+          const stored = localStorage.getItem("cleanpix_cutout_history");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const filtered = parsed.filter((item: any) => item.id !== id);
+            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+          }
+        } catch {}
+      }
 
       showToast("Cutout deleted.");
     } catch (err: any) {

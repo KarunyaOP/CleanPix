@@ -18,10 +18,25 @@ export default function HistoryPage() {
     }
   }, [status, router]);
 
+  const sessionUserEmail = session?.user?.email;
+  const sessionUserId = session?.user?.id;
+
   useEffect(() => {
-    if (status === "authenticated" && session?.user?.email) {
-      const emailQuery = `?userEmail=${encodeURIComponent(session.user.email)}`;
-      fetch(`/api/projects${emailQuery}`)
+    if (status === "authenticated" && (sessionUserEmail || sessionUserId)) {
+      const email = sessionUserEmail || "";
+      const userId = sessionUserId || "";
+      const emailQuery = email ? `userEmail=${encodeURIComponent(email)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+      fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(email ? { "x-user-email": email } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
+        },
+      })
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.projects)) {
@@ -31,7 +46,7 @@ export default function HistoryPage() {
         .catch((err) => console.error("[HISTORY_PROJECTS_FETCH_ERROR]", err))
         .finally(() => setIsLoadingProjects(false));
     }
-  }, [status, session?.user?.email]);
+  }, [status, sessionUserEmail, sessionUserId]);
 
   if (status === "loading" || (status === "authenticated" && isLoadingProjects)) {
     return (

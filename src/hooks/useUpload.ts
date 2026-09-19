@@ -281,12 +281,19 @@ export function useUpload() {
       if (session?.user?.email) {
         formData.append("userEmail", session.user.email);
       }
+      if (session?.user?.id) {
+        formData.append("userId", session.user.id);
+      }
 
       setUploadProgress(50);
 
       // 2. Send to /api/remove-background for Cloudinary AI processing
       const response = await fetch("/api/remove-background", {
         method: "POST",
+        headers: {
+          ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+          ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
+        },
         body: formData,
       });
 
@@ -342,8 +349,10 @@ export function useUpload() {
             headers: {
               "Content-Type": "application/json",
               "x-user-email": session.user.email,
+              ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
             },
             body: JSON.stringify({
+              userId: session.user.id,
               userEmail: session.user.email,
               originalUrl: successData.originalUrl || file.name,
               processedUrl: successData.processedUrl,
@@ -361,34 +370,32 @@ export function useUpload() {
         }
       }
 
-      // 6. Save to client history & notify real-time listeners
+      // 6. Notify real-time listeners across Dashboard & History
       const newCutout = {
         id: verifiedProjectId,
-        originalName: file.name,
-        originalUrl: successData.originalUrl || successData.processedUrl,
-        cutoutUrl: successData.processedUrl,
+        originalUrl: successData.originalUrl || file.name,
         processedUrl: successData.processedUrl,
-        timestamp: "Just now",
-        createdAt: new Date().toISOString(),
-        category: successData.detectedObject ? successData.detectedObject.charAt(0).toUpperCase() + successData.detectedObject.slice(1) : "Cutout",
         detectedObject: successData.detectedObject || "other",
         status: "done",
+        createdAt: new Date().toISOString(),
       };
 
-      try {
-        const stored = localStorage.getItem("cleanpix_cutout_history");
-        const list = stored ? JSON.parse(stored) : [];
-        const filtered = Array.isArray(list)
-          ? list.filter(
-              (item: any) =>
-                item.cutoutUrl !== successData.processedUrl &&
-                item.processedUrl !== successData.processedUrl &&
-                item.id !== newCutout.id
-            )
-          : [];
-        const updated = [newCutout, ...filtered.slice(0, 49)];
-        localStorage.setItem("cleanpix_cutout_history", JSON.stringify(updated));
-      } catch {}
+      // Guest only: keep local cache when unauthenticated
+      if (!session?.user) {
+        try {
+          const stored = localStorage.getItem("cleanpix_cutout_history");
+          const list = stored ? JSON.parse(stored) : [];
+          const filtered = Array.isArray(list)
+            ? list.filter(
+                (item: any) =>
+                  item.processedUrl !== successData.processedUrl &&
+                  item.id !== newCutout.id
+              )
+            : [];
+          const updated = [newCutout, ...filtered.slice(0, 49)];
+          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(updated));
+        } catch {}
+      }
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(

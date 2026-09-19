@@ -38,47 +38,59 @@ export async function POST(request: NextRequest) {
     // 2. Check User Authentication & Atomic Credit Reservation (concurrency guard for free tier)
     const session = await getAuthSession();
     const formUserEmail = (formData.get("userEmail") as string)?.trim()?.toLowerCase();
-    const effectiveEmail = formUserEmail || session?.user?.email;
+    const formUserId = (formData.get("userId") as string)?.trim();
+    const headerEmail = request.headers.get("x-user-email")?.trim()?.toLowerCase();
+    const headerId = request.headers.get("x-user-id")?.trim();
+    const effectiveEmail = formUserEmail || headerEmail || session?.user?.email;
+    const effectiveId = formUserId || headerId;
+
     let dbUser: { id: string; email: string; credits: number; plan: string } | null = null;
     let isUnlimited = false;
     let creditReserved = false;
 
-    if (effectiveEmail) {
+    if (effectiveId) {
+      dbUser = await prisma.user.findUnique({
+        where: { id: effectiveId },
+        select: { id: true, email: true, credits: true, plan: true },
+      });
+    }
+
+    if (!dbUser && effectiveEmail) {
       dbUser = await prisma.user.findUnique({
         where: { email: effectiveEmail },
         select: { id: true, email: true, credits: true, plan: true },
       });
+    }
 
-      if (dbUser) {
-        const userPlan = (dbUser.plan || "free").toLowerCase();
-        isUnlimited = userPlan === "pro" || userPlan === "business" || userPlan === "enterprise";
+    if (dbUser) {
+      const userPlan = (dbUser.plan || "free").toLowerCase();
+      isUnlimited = userPlan === "pro" || userPlan === "business" || userPlan === "enterprise";
 
-        // For FREE tier: atomically deduct 1 credit if credits > 0 to prevent race conditions
-        if (!isUnlimited) {
-          const updateResult = await prisma.user.updateMany({
-            where: {
-              id: dbUser.id,
-              credits: { gt: 0 },
-            },
-            data: {
-              credits: { decrement: 1 },
-            },
-          });
+      // For FREE tier: atomically deduct 1 credit if credits > 0 to prevent race conditions
+      if (!isUnlimited) {
+        const updateResult = await prisma.user.updateMany({
+          where: {
+            id: dbUser.id,
+            credits: { gt: 0 },
+          },
+          data: {
+            credits: { decrement: 1 },
+          },
+        });
 
-          if (updateResult.count === 0) {
-            return NextResponse.json(
-              {
-                error: {
-                  code: "INSUFFICIENT_CREDITS",
-                  message: "You have 0 credits remaining. Please upgrade your plan to continue processing images.",
-                  creditsRemaining: 0,
-                },
+        if (updateResult.count === 0) {
+          return NextResponse.json(
+            {
+              error: {
+                code: "INSUFFICIENT_CREDITS",
+                message: "You have 0 credits remaining. Please upgrade your plan to continue processing images.",
+                creditsRemaining: 0,
               },
-              { status: 403 }
-            );
-          }
-          creditReserved = true;
+            },
+            { status: 403 }
+          );
         }
+        creditReserved = true;
       }
     }
 

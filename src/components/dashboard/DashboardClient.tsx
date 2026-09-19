@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/components/providers/AuthProvider";
 import {
   Layers,
   Sparkles,
@@ -68,6 +69,10 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   initialRecentProjects,
 }) => {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userEmail = session?.user?.email || user.email || "";
+  const userId = session?.user?.id || user.id || "";
+
   const [stats, setStats] = useState(initialStats);
   const [recentProjects, setRecentProjects] = useState<DashboardProject[]>(initialRecentProjects);
   const [userPlan, setUserPlan] = useState<string>(user.plan || "free");
@@ -110,57 +115,17 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   }, [user.plan]);
 
   /**
-   * Re-fetch live stats and recent activity directly from database
-   */
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      const emailQuery = user.email ? `?userEmail=${encodeURIComponent(user.email)}` : "";
-      const res = await fetch(`/api/projects${emailQuery}`, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(user.email ? { "x-user-email": user.email } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          const freshProjects: DashboardProject[] = data.projects;
-          const completedCount = freshProjects.filter(
-            (p) => p.status === "done" || p.processedUrl
-          ).length;
-
-          setRecentProjects(freshProjects.slice(0, 5));
-          setStats((prev) => ({
-            ...prev,
-            totalProjects: freshProjects.length,
-            totalProcessed: completedCount,
-          }));
-          showToast("Dashboard refreshed.");
-        }
-      }
-      router.refresh();
-    } catch (err) {
-      console.error("[DASHBOARD_REFRESH_ERROR]", err);
-      showToast("Could not refresh dashboard.");
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  /**
    * Auto-fetch fresh stats & projects from Supabase in background
    */
   const fetchFreshData = useCallback(async () => {
     try {
-      const emailQuery = user.email ? `?userEmail=${encodeURIComponent(user.email)}` : "";
+      const emailQuery = userEmail ? `?userEmail=${encodeURIComponent(userEmail)}` : "";
       const res = await fetch(`/api/projects${emailQuery}`, {
         method: "GET",
         headers: {
           "Cache-Control": "no-cache",
-          ...(user.email ? { "x-user-email": user.email } : {}),
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -169,7 +134,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         if (data.success && Array.isArray(data.projects)) {
           const freshProjects: DashboardProject[] = data.projects;
           const completedCount = freshProjects.filter(
-            (p) => p.status === "done" || p.processedUrl
+            (p) => p.status === "done" || Boolean(p.processedUrl)
           ).length;
 
           setRecentProjects(freshProjects.slice(0, 5));
@@ -183,23 +148,33 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     } catch (err) {
       console.error("[DASHBOARD_AUTO_SYNC_ERROR]", err);
     }
-  }, [user.email]);
+  }, [userEmail, userId]);
+
+  // Initial mount sync from Supabase
+  useEffect(() => {
+    fetchFreshData();
+  }, [fetchFreshData]);
+
+  /**
+   * Re-fetch live stats and recent activity directly from database
+   */
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchFreshData();
+      showToast("Dashboard refreshed from database.");
+      router.refresh();
+    } catch (err) {
+      console.error("[DASHBOARD_REFRESH_ERROR]", err);
+      showToast("Could not refresh dashboard.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Real-time synchronization event listeners across tabs/components
   useEffect(() => {
-    const handleProjectCreated = (e: any) => {
-      const newProj = e.detail;
-      if (newProj && newProj.id) {
-        setRecentProjects((prev) => {
-          if (prev.some((p) => p.id === newProj.id)) return prev;
-          return [newProj, ...prev.slice(0, 4)];
-        });
-        setStats((prev) => ({
-          ...prev,
-          totalProjects: prev.totalProjects + 1,
-          totalProcessed: prev.totalProcessed + 1,
-        }));
-      }
+    const handleProjectCreated = () => {
       fetchFreshData();
     };
 
@@ -264,11 +239,15 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     setDeleteLoadingId(id);
 
     try {
-      const emailQuery = user.email ? `&userEmail=${encodeURIComponent(user.email)}` : "";
-      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
+
+      const res = await fetch(`/api/projects?${queryString}`, {
         method: "DELETE",
         headers: {
-          ...(user.email ? { "x-user-email": user.email } : {}),
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -280,20 +259,23 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       // 1. Update local state
       setRecentProjects((prev) => prev.filter((p) => p.id !== id));
 
-      // 2. Broadcast event to History views
+      // 2. Broadcast events to History views
       window.dispatchEvent(
         new CustomEvent("cleanpix_project_deleted", { detail: { id } })
       );
+      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
 
-      // 3. Clear from localStorage
-      try {
-        const localData = localStorage.getItem("cleanpix_cutout_history");
-        if (localData) {
-          const parsed = JSON.parse(localData);
-          const filtered = parsed.filter((item: any) => item.id !== id);
-          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-        }
-      } catch {}
+      // 3. Clear from localStorage only if guest
+      if (!userEmail && !userId) {
+        try {
+          const localData = localStorage.getItem("cleanpix_cutout_history");
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            const filtered = parsed.filter((item: any) => item.id !== id);
+            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+          }
+        } catch {}
+      }
 
       // 4. Fetch fresh stats directly from Supabase
       await fetchFreshData();

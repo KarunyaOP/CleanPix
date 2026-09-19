@@ -6,28 +6,49 @@ import { DetectedObject } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 /**
+ * Helper to reliably resolve the authenticated user from Supabase ID, headers, query, body, or NextAuth session
+ */
+async function resolveUser(request: NextRequest, body?: any) {
+  const session = await getAuthSession();
+  const { searchParams } = new URL(request.url);
+
+  const queryId = searchParams.get("userId") || request.headers.get("x-user-id") || body?.userId;
+  const queryEmail =
+    searchParams.get("userEmail") ||
+    request.headers.get("x-user-email") ||
+    body?.userEmail ||
+    session?.user?.email;
+
+  const effectiveEmail = queryEmail ? queryEmail.trim().toLowerCase() : null;
+  const effectiveId = queryId ? queryId.trim() : null;
+
+  if (!effectiveId && !effectiveEmail) {
+    return null;
+  }
+
+  let user = null;
+  if (effectiveId) {
+    user = await prisma.user.findUnique({
+      where: { id: effectiveId },
+    });
+  }
+
+  if (!user && effectiveEmail) {
+    user = await prisma.user.findUnique({
+      where: { email: effectiveEmail },
+    });
+  }
+
+  return user;
+}
+
+/**
  * GET /api/projects
  * Fetches user's complete processing history from PostgreSQL database
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getAuthSession();
-    const { searchParams } = new URL(request.url);
-    const queryEmail = searchParams.get("userEmail") || request.headers.get("x-user-email");
-    const effectiveEmail = queryEmail?.trim()?.toLowerCase() || session?.user?.email;
-
-    if (!effectiveEmail) {
-      return NextResponse.json({
-        success: true,
-        projects: [],
-        totalCount: 0,
-        authenticated: false,
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: effectiveEmail },
-    });
+    const user = await resolveUser(request);
 
     if (!user) {
       return NextResponse.json({
@@ -38,6 +59,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
     const pageParam = searchParams.get("page");
@@ -84,13 +106,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getAuthSession();
     const body = await request.json().catch(() => ({}));
-    const { originalUrl, processedUrl, detectedObject, userEmail } = body;
-    const headerEmail = request.headers.get("x-user-email");
-    const effectiveEmail = userEmail?.trim()?.toLowerCase() || headerEmail?.trim()?.toLowerCase() || session?.user?.email;
+    const user = await resolveUser(request, body);
 
-    if (!effectiveEmail) {
+    if (!user) {
       return NextResponse.json(
         {
           error: {
@@ -102,21 +121,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: effectiveEmail },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "USER_NOT_FOUND",
-            message: "User account not found.",
-          },
-        },
-        { status: 404 }
-      );
-    }
+    const { originalUrl, processedUrl, detectedObject } = body;
 
     if (!originalUrl || !processedUrl) {
       return NextResponse.json(
@@ -187,12 +192,9 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getAuthSession();
-    const { searchParams } = new URL(request.url);
-    const queryEmail = searchParams.get("userEmail") || request.headers.get("x-user-email");
-    const effectiveEmail = queryEmail?.trim()?.toLowerCase() || session?.user?.email;
+    const user = await resolveUser(request);
 
-    if (!effectiveEmail) {
+    if (!user) {
       return NextResponse.json(
         {
           error: {
@@ -204,22 +206,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: effectiveEmail },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "USER_NOT_FOUND",
-            message: "User account not found.",
-          },
-        },
-        { status: 404 }
-      );
-    }
-
+    const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const all = searchParams.get("all");
 

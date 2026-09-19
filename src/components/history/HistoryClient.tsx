@@ -73,6 +73,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     (session?.user as any)?.credits ?? initialUser?.credits ?? 10
   );
   const userEmail = session?.user?.email || initialUser?.email || "";
+  const userId = session?.user?.id || (initialUser as any)?.id || "";
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -85,67 +86,21 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   }, [initialProjects]);
 
   /**
-   * Manual Re-fetch from API
-   */
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "GET",
-        headers: { "Cache-Control": "no-cache" },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          setProjects(data.projects);
-          showToast("History refreshed from database.");
-          router.refresh();
-          return;
-        }
-      }
-
-      // Guest fallback
-      const localData = localStorage.getItem("cleanpix_cutout_history");
-      if (localData) {
-        try {
-          const parsed = JSON.parse(localData);
-          if (Array.isArray(parsed)) {
-            const mapped: ProjectRecord[] = parsed.map((item: any) => ({
-              id: item.id || `local-${Math.random()}`,
-              originalUrl: item.originalUrl || item.cutoutUrl || "/images/hero-original.jpg",
-              processedUrl: item.cutoutUrl || item.processedUrl || "/images/hero-cutout.jpg",
-              detectedObject: item.category?.toLowerCase() || "cutout",
-              status: "done",
-              createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
-            }));
-            setProjects(mapped);
-            showToast("History is up to date.");
-            return;
-          }
-        } catch {}
-      }
-
-      showToast("History is up to date.");
-    } catch (err) {
-      console.error("[REFRESH_ERROR]", err);
-      showToast("Could not refresh history.");
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  /**
    * Auto-fetch fresh history records from Supabase in background
    */
   const fetchFreshHistory = useCallback(async () => {
     try {
-      const emailQuery = userEmail ? `?userEmail=${encodeURIComponent(userEmail)}` : "";
-      const res = await fetch(`/api/projects${emailQuery}`, {
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+      const res = await fetch(url, {
         method: "GET",
         headers: {
           "Cache-Control": "no-cache",
           ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -158,7 +113,74 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     } catch (err) {
       console.error("[HISTORY_AUTO_SYNC_ERROR]", err);
     }
-  }, [userEmail]);
+  }, [userEmail, userId]);
+
+  // Initial mount live sync from Supabase
+  useEffect(() => {
+    fetchFreshHistory();
+  }, [fetchFreshHistory]);
+
+  /**
+   * Manual Re-fetch from API
+   */
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.projects)) {
+          setProjects(data.projects);
+          showToast("History refreshed from database.");
+          router.refresh();
+          return;
+        }
+      }
+
+      // Guest fallback only if no authenticated user
+      if (!userEmail && !userId) {
+        const localData = localStorage.getItem("cleanpix_cutout_history");
+        if (localData) {
+          try {
+            const parsed = JSON.parse(localData);
+            if (Array.isArray(parsed)) {
+              const mapped: ProjectRecord[] = parsed.map((item: any) => ({
+                id: item.id || `local-${Math.random()}`,
+                originalUrl: item.originalUrl || item.cutoutUrl || "/images/hero-original.jpg",
+                processedUrl: item.cutoutUrl || item.processedUrl || "/images/hero-cutout.jpg",
+                detectedObject: item.category?.toLowerCase() || "cutout",
+                status: "done",
+                createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
+              }));
+              setProjects(mapped);
+              showToast("History is up to date.");
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      showToast("History is up to date.");
+    } catch (err) {
+      console.error("[REFRESH_ERROR]", err);
+      showToast("Could not refresh history.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Real-time synchronization event listeners across tabs/components
   useEffect(() => {
@@ -225,11 +247,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     setDeleteLoadingId(id);
 
     try {
-      const emailQuery = userEmail ? `&userEmail=${encodeURIComponent(userEmail)}` : "";
-      const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}${emailQuery}`, {
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
+      const res = await fetch(`/api/projects?${queryString}`, {
         method: "DELETE",
         headers: {
           ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -241,20 +266,23 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       // 1. Confirmed deletion: update UI state
       setProjects((prev) => prev.filter((p) => p.id !== id));
 
-      // 2. Broadcast single deletion event to Dashboard and HistoryModal
+      // 2. Broadcast single deletion event and history refresh to Dashboard and HistoryModal
       window.dispatchEvent(
         new CustomEvent("cleanpix_project_deleted", { detail: { id } })
       );
+      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
 
-      // 3. Update localStorage
-      try {
-        const localData = localStorage.getItem("cleanpix_cutout_history");
-        if (localData) {
-          const parsed = JSON.parse(localData);
-          const filtered = parsed.filter((item: any) => item.id !== id);
-          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-        }
-      } catch {}
+      // 3. Update localStorage only if guest
+      if (!userEmail && !userId) {
+        try {
+          const localData = localStorage.getItem("cleanpix_cutout_history");
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            const filtered = parsed.filter((item: any) => item.id !== id);
+            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
+          }
+        } catch {}
+      }
 
       showToast("Cutout deleted from database.");
       router.refresh();
@@ -273,11 +301,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     setIsDeletingAll(true);
 
     try {
-      const emailQuery = userEmail ? `&userEmail=${encodeURIComponent(userEmail)}` : "";
-      const res = await fetch(`/api/projects?all=true${emailQuery}`, {
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = ["all=true", emailQuery, idQuery].filter(Boolean).join("&");
+      const res = await fetch(`/api/projects?${queryString}`, {
         method: "DELETE",
         headers: {
           ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
       });
 
@@ -291,11 +322,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
 
       // 2. Broadcast event across tabs/components
       window.dispatchEvent(new CustomEvent("cleanpix_project_all_deleted"));
+      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
 
-      // 3. Clear localStorage
-      try {
-        localStorage.removeItem("cleanpix_cutout_history");
-      } catch {}
+      // 3. Clear localStorage only if guest
+      if (!userEmail && !userId) {
+        try {
+          localStorage.removeItem("cleanpix_cutout_history");
+        } catch {}
+      }
 
       showToast("All processing history deleted permanently.");
       router.refresh();
