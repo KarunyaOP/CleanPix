@@ -310,7 +310,13 @@ export const Hero: React.FC = () => {
           </div>
 
           {/* RIGHT COLUMN: Results Preview + Copy PNG OR Landing Preview + Detected Product Panel */}
-          <div className="lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 lg:-translate-y-5 xl:-translate-y-8 w-full">
+          <div
+            className={`lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full ${
+              file && previewUrl
+                ? "lg:translate-y-6 xl:translate-y-7"
+                : "lg:-translate-y-5 xl:-translate-y-8"
+            }`}
+          >
             {file && previewUrl ? (
               /* RESULTS PAGE: Large Processed Image Preview + Copy Transparent PNG Section */
               <div className="w-full max-w-[780px] flex flex-col gap-4">
