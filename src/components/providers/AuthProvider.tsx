@@ -105,6 +105,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("[SUPABASE_GET_SESSION_ERROR]", error);
       }
       if (initialSession?.user) {
+        const initialUser: CleanPixUser = {
+          id: initialSession.user.id,
+          email: initialSession.user.email || "",
+          name: initialSession.user.user_metadata?.full_name || initialSession.user.user_metadata?.name || null,
+          image: initialSession.user.user_metadata?.avatar_url || initialSession.user.user_metadata?.picture || null,
+          credits: 10,
+          plan: "free",
+          authProvider: "email",
+        };
+        setUser((prev) => prev || initialUser);
         setSession(initialSession);
         setStatus("authenticated");
         syncUserProfile(initialSession.user, initialSession.access_token);
@@ -122,6 +132,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`[SUPABASE_AUTH_EVENT] ${event}`, { email: currentSession?.user?.email });
 
       if (currentSession?.user) {
+        const currentAuthUser: CleanPixUser = {
+          id: currentSession.user.id,
+          email: currentSession.user.email || "",
+          name: currentSession.user.user_metadata?.full_name || currentSession.user.user_metadata?.name || null,
+          image: currentSession.user.user_metadata?.avatar_url || currentSession.user.user_metadata?.picture || null,
+          credits: 10,
+          plan: "free",
+          authProvider: "email",
+        };
+        setUser((prev) => prev || currentAuthUser);
         setSession(currentSession);
         setStatus("authenticated");
         await syncUserProfile(currentSession.user, currentSession.access_token);
@@ -226,10 +246,24 @@ export const useAuth = () => useContext(AuthContext);
  */
 export const useSession = () => {
   const { user, session, status, update } = useContext(AuthContext);
-  return {
-    data: user
+  const resolvedUser =
+    user ||
+    (session?.user
       ? {
-          user,
+          id: session.user.id,
+          email: session.user.email || "",
+          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || null,
+          image: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || null,
+          credits: 10,
+          plan: "free",
+          authProvider: "email",
+        }
+      : null);
+
+  return {
+    data: resolvedUser
+      ? {
+          user: resolvedUser,
           expires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : "",
         }
       : null,

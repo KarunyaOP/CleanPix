@@ -204,7 +204,18 @@ export const Navbar: React.FC = () => {
 
           {/* Right Actions - Desktop */}
           <div className="hidden md:flex items-center gap-2.5">
-            {session?.user ? (
+            {status === "loading" ? (
+              /* Auth Loading Skeleton Pill */
+              <div
+                className="flex items-center gap-2 pl-1.5 pr-3 h-[48px] rounded-pill bg-[#131A3A]/70 border border-primary/20 animate-pulse select-none shrink-0"
+                aria-label="Loading profile..."
+              >
+                <div className="w-[34px] h-[34px] rounded-full bg-primary/25 shrink-0" />
+                <div className="w-16 h-3.5 rounded-md bg-white/15 shrink-0" />
+                <div className="w-10 h-4 rounded-pill bg-primary/20 shrink-0" />
+                <div className="w-14 h-4 rounded-pill bg-primary/20 shrink-0" />
+              </div>
+            ) : session?.user ? (
               /* Authenticated View: 48px Modern SaaS Profile Pill with 34px Avatar */
               <div className="relative">
                 <button
@@ -322,7 +333,7 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
             ) : (
-              /* Unauthenticated / Guest View - Clean Log In Button */
+              /* Unauthenticated / Guest View - Clean Log In Button (ONLY when status === "unauthenticated") */
               <Link
                 href="/login"
                 className="px-6 py-2.5 rounded-btn text-sm font-semibold text-[#F8FAFC] bg-[#131A3A]/80 border border-white/18 hover:border-accent/40 hover:bg-[#1B2350] hover:shadow-[0_0_18px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer"
@@ -375,7 +386,16 @@ export const Navbar: React.FC = () => {
               </nav>
 
               <div className="pt-4 border-t border-white/[0.1] flex flex-col gap-3">
-                {session?.user ? (
+                {status === "loading" ? (
+                  /* Mobile Auth Loading Skeleton */
+                  <div className="p-3 rounded-[12px] bg-[#131A3A]/70 border border-white/10 animate-pulse flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-white/15 shrink-0" />
+                      <div className="w-24 h-3.5 rounded bg-white/15" />
+                    </div>
+                    <div className="w-14 h-4 rounded-pill bg-primary/20 shrink-0" />
+                  </div>
+                ) : session?.user ? (
                   <div className="flex flex-col gap-2.5">
                     <div className="flex items-center justify-between p-2.5 rounded-[12px] bg-[#131A3A] border border-white/10">
                       <div className="flex items-center gap-2 truncate">
@@ -460,6 +480,7 @@ export const Navbar: React.FC = () => {
                     </button>
                   </div>
                 ) : (
+                  /* Mobile Guest Menu (ONLY when status === "unauthenticated") */
                   <Link
                     href="/login"
                     onClick={() => {
