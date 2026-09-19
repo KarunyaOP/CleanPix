@@ -181,16 +181,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         duration: shouldReduceMotion ? 0.3 : 0.55,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="w-full max-w-[440px] rounded-[28px] bg-[#131A3A]/90 backdrop-blur-2xl border border-primary/35 p-4.5 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_30px_rgba(79,124,255,0.2)] flex flex-col gap-5 sm:gap-6"
+      className="w-full max-w-[440px] my-auto rounded-[24px] sm:rounded-[28px] bg-[#131A3A]/90 backdrop-blur-2xl border border-primary/35 p-4 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_30px_rgba(79,124,255,0.2)] flex flex-col gap-4 sm:gap-6 min-w-0"
     >
       {/* Brand Header */}
-      <div className="flex flex-col items-center text-center gap-3">
+      <div className="flex flex-col items-center text-center gap-2.5 sm:gap-3">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative w-14 h-14 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
             <img
               src="/branding/logo/cleanpix-icon.svg"
               alt="CleanPix Brand Icon"
-              className="w-14 h-14 object-contain drop-shadow-[0_0_24px_rgba(0,240,255,0.55)]"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_0_24px_rgba(0,240,255,0.55)]"
             />
           </div>
         </Link>
@@ -239,7 +239,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isGoogleLoading || isEmailLoading}
-            className="w-full py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white bg-white/[0.07] hover:bg-white/[0.12] border border-white/20 hover:border-white/40 shadow-sm transition-all duration-150 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group active:scale-[0.98]"
+            className="w-full py-3 sm:py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white bg-white/[0.07] hover:bg-white/[0.12] border border-white/20 hover:border-white/40 shadow-sm transition-all duration-150 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group active:scale-[0.98]"
           >
             {isGoogleLoading ? (
               <Loader2 size={16} className="animate-spin text-accent" />
@@ -276,7 +276,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           </div>
 
           {/* 2. Passwordless Email Magic Link Form */}
-          <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3.5">
+          <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3 sm:gap-3.5">
             <div className="relative">
               <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
@@ -285,14 +285,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
                 required
-                className="w-full pl-10 pr-4 py-3 rounded-btn text-sm text-white bg-[#0A0B1E]/90 border border-white/15 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 transition-all placeholder:text-text-muted"
+                className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-btn text-sm text-white bg-[#0A0B1E]/90 border border-white/15 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 transition-all placeholder:text-text-muted"
               />
             </div>
 
             <button
               type="submit"
               disabled={isEmailLoading || isGoogleLoading}
-              className="w-full py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_24px_rgba(79,124,255,0.6)] hover:shadow-[0_0_36px_rgba(79,124,255,0.85)] hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 sm:py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_24px_rgba(79,124,255,0.6)] hover:shadow-[0_0_36px_rgba(79,124,255,0.85)] hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isEmailLoading ? (
                 <Loader2 size={16} className="animate-spin text-accent" />
@@ -317,7 +317,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             <button
               type="button"
               onClick={handleGuestClick}
-              className="w-full py-3.5 px-4 rounded-btn text-sm font-semibold text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/20 hover:border-accent/50 shadow-sm hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] group"
+              className="w-full py-3 sm:py-3.5 px-4 rounded-btn text-sm font-semibold text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/20 hover:border-accent/50 shadow-sm hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] group"
             >
               <span>Continue as Guest</span>
               <ArrowRight size={15} className="text-accent group-hover:translate-x-0.5 transition-transform" />
@@ -326,7 +326,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             <Link
               href={guestHref}
               onClick={handleGuestClick}
-              className="w-full py-3.5 px-4 rounded-btn text-sm font-semibold text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/20 hover:border-accent/50 shadow-sm hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] group"
+              className="w-full py-3 sm:py-3.5 px-4 rounded-btn text-sm font-semibold text-white bg-[#131A3A]/90 hover:bg-[#1B2350] border border-white/20 hover:border-accent/50 shadow-sm hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] group"
             >
               <span>Continue as Guest</span>
               <ArrowRight size={15} className="text-accent group-hover:translate-x-0.5 transition-transform" />
@@ -336,7 +336,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       )}
 
       {/* Trust Badges */}
-      <div className="pt-2 border-t border-white/[0.08] flex items-center justify-center gap-6 text-[11px] text-text-muted">
+      <div className="pt-2 border-t border-white/[0.08] flex items-center justify-center gap-4 sm:gap-6 text-[11px] text-text-muted">
         <div className="flex items-center gap-1.5">
           <ShieldCheck size={13} className="text-status-success" />
           <span>Passwordless & Secure</span>

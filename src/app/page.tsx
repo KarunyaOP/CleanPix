@@ -106,7 +106,7 @@ export default function HomePage() {
 
   // 3. User is unauthenticated and not in guest mode -> Render Login Form
   return (
-    <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 select-none">
+    <main className="relative min-h-screen min-h-[100dvh] bg-[#0A0B1E] flex flex-col items-center justify-center px-3.5 sm:px-6 py-6 sm:py-12 select-none overflow-x-hidden">
       <LoginForm
         onContinueAsGuest={handleContinueAsGuest}
         animateEntrance={true}
