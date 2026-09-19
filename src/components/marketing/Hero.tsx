@@ -208,7 +208,7 @@ export const Hero: React.FC = () => {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={openFilePicker}
-                  className={`w-full rounded-[22px] border-2 transition-all duration-200 cursor-pointer p-4 sm:p-6 mb-3 relative overflow-hidden group select-none ${
+                  className={`w-full rounded-[22px] border-2 transition-all duration-200 cursor-pointer p-4 sm:p-5 mb-3 relative overflow-hidden group select-none ${
                     isDragging
                       ? "border-primary bg-primary/15 shadow-[0_0_40px_rgba(79,124,255,0.7),inset_0_0_20px_rgba(79,124,255,0.3)] scale-[1.02]"
                       : "border-dashed border-primary/40 bg-[#131A3A]/60 hover:border-primary/80 hover:bg-[#131A3A]/85 hover:shadow-[0_0_30px_rgba(79,124,255,0.25)] backdrop-blur-xl"
@@ -229,52 +229,52 @@ export const Hero: React.FC = () => {
                     </div>
                   ) : (
                     /* DEFAULT REST STATE WITH BUTTONS AND HELPER TEXT */
-                    <div className="flex flex-col items-start gap-4">
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                        {/* 1. Primary Action: Upload Image */}
+                    <div className="flex flex-col items-start gap-3.5 w-full">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                        {/* 1. Primary Action: Upload Image (Row 1, Col 1) */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             openFilePicker();
                           }}
-                          className="group/btn relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3.5 rounded-btn font-heading font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_30px_rgba(79,124,255,0.6),0_0_60px_rgba(139,92,246,0.3)] hover:shadow-[0_0_45px_rgba(79,124,255,0.8),0_0_80px_rgba(139,92,246,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer overflow-hidden min-h-[46px]"
+                          className="group/btn relative inline-flex items-center justify-center gap-2.5 px-4 h-12 w-full rounded-btn font-heading font-bold text-sm text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_30px_rgba(79,124,255,0.6),0_0_60px_rgba(139,92,246,0.3)] hover:shadow-[0_0_45px_rgba(79,124,255,0.8),0_0_80px_rgba(139,92,246,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer overflow-hidden"
                         >
                           <div className="absolute inset-x-0 top-0 h-px bg-white/40 pointer-events-none" />
-                          <UploadCloud size={19} className="group-hover/btn:scale-110 transition-transform duration-200 shrink-0" />
-                          <span>Upload Image</span>
+                          <UploadCloud size={18} className="group-hover/btn:scale-110 transition-transform duration-200 shrink-0" />
+                          <span className="whitespace-nowrap">Upload Image</span>
                         </button>
 
-                        {/* 2. Secondary Action 1: Watch 10s Demo */}
+                        {/* 2. Secondary Action 1: Watch 10s Demo (Row 1, Col 2) */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsDemoModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-3 rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer min-h-[44px]"
+                          className="inline-flex items-center justify-center gap-2 px-4 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer"
                         >
                           <Play size={14} className="fill-current text-accent shrink-0" />
-                          <span>Watch 10s Demo</span>
+                          <span className="whitespace-nowrap">Watch 10s Demo</span>
                         </button>
 
-                        {/* 3. Secondary Action 2: Explore Templates */}
+                        {/* 3. Secondary Action 2: Explore Templates (Row 2, Col 1) */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsTemplatesModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-3 rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer min-h-[44px]"
+                          className="inline-flex items-center justify-center gap-2 px-4 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer"
                         >
                           <Layers size={14} className="text-accent shrink-0" />
-                          <span>Explore Templates</span>
+                          <span className="whitespace-nowrap">Explore Templates</span>
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide">
+                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
-                        <span>or drag and drop anywhere in box (Ctrl + V supported)</span>
+                        <span>Drag and drop anywhere in box (Ctrl + V supported)</span>
                       </div>
                     </div>
                   )}
