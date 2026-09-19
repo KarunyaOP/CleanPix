@@ -314,7 +314,7 @@ export const Hero: React.FC = () => {
             className={`lg:col-span-7 xl:col-span-1 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full ${
               file && previewUrl
                 ? "lg:translate-y-5 xl:translate-y-5"
-                : "lg:-translate-y-7 xl:-translate-y-8"
+                : "lg:-translate-y-[50px] xl:-translate-y-[50px]"
             }`}
           >
             {file && previewUrl ? (
