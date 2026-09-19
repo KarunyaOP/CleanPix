@@ -72,6 +72,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const [liveCredits, setLiveCredits] = useState<number>(
     (session?.user as any)?.credits ?? initialUser?.credits ?? 10
   );
+  const userEmail = session?.user?.email || initialUser?.email || "";
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -134,6 +135,31 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     }
   };
 
+  /**
+   * Auto-fetch fresh history records from Supabase in background
+   */
+  const fetchFreshHistory = useCallback(async () => {
+    try {
+      const emailQuery = userEmail ? `?userEmail=${encodeURIComponent(userEmail)}` : "";
+      const res = await fetch(`/api/projects${emailQuery}`, {
+        method: "GET",
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.projects)) {
+          setProjects(data.projects);
+        }
+      }
+    } catch (err) {
+      console.error("[HISTORY_AUTO_SYNC_ERROR]", err);
+    }
+  }, [userEmail]);
+
   // Real-time synchronization event listeners across tabs/components
   useEffect(() => {
     const handleProjectCreated = (e: any) => {
@@ -145,6 +171,11 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         });
         showToast("New cutout added to history.");
       }
+      fetchFreshHistory();
+    };
+
+    const handleHistoryRefresh = () => {
+      fetchFreshHistory();
     };
 
     const handleProjectDeleted = (e: any) => {
@@ -171,6 +202,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     };
 
     window.addEventListener("cleanpix_project_created", handleProjectCreated);
+    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
     window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
     window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
     window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
@@ -178,12 +210,13 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
 
     return () => {
       window.removeEventListener("cleanpix_project_created", handleProjectCreated);
+      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
       window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
       window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
     };
-  }, []);
+  }, [fetchFreshHistory]);
 
   /**
    * Delete single project
@@ -579,17 +612,17 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         {/* History Cards Grid */}
         {filteredProjects.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5 mb-8 w-full min-w-0">
               {paginatedProjects.map((project) => {
                 const filename = project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`;
                 return (
                   <div
                     key={project.id}
-                    className="group relative rounded-[20px] bg-[#131A3A]/80 hover:bg-[#131A3A] border border-white/12 hover:border-primary/50 p-4 flex flex-col justify-between gap-3.5 transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:shadow-[0_12px_40px_rgba(79,124,255,0.25)] hover:-translate-y-0.5"
+                    className="group relative rounded-[18px] sm:rounded-[20px] bg-[#131A3A]/80 hover:bg-[#131A3A] border border-white/12 hover:border-primary/50 p-3.5 sm:p-4 flex flex-col justify-between gap-3 sm:gap-3.5 transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:shadow-[0_12px_40px_rgba(79,124,255,0.25)] hover:-translate-y-0.5 w-full min-w-0"
                   >
                     {/* Compact 120x120 Thumbnail Stage */}
-                    <div className="flex flex-col items-center gap-2.5">
-                      <div className="relative w-[120px] h-[120px] rounded-[16px] checkerboard-pattern border border-white/15 overflow-hidden flex items-center justify-center p-1.5 shadow-inner shrink-0 group-hover:border-primary/40 transition-colors">
+                    <div className="flex flex-col items-center gap-2.5 min-w-0 w-full">
+                      <div className="relative w-[110px] h-[110px] sm:w-[120px] sm:h-[120px] rounded-[14px] sm:rounded-[16px] checkerboard-pattern border border-white/15 overflow-hidden flex items-center justify-center p-1.5 shadow-inner shrink-0 group-hover:border-primary/40 transition-colors">
                         <img
                           src={project.processedUrl || project.originalUrl}
                           alt={filename}
@@ -620,24 +653,24 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
                     </div>
 
                     {/* Card Actions Row */}
-                    <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-1.5">
+                    <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-1.5 w-full min-w-0">
                       {/* Copy Button */}
                       <button
                         type="button"
                         onClick={() =>
                           handleCopy(project.id, project.processedUrl || project.originalUrl)
                         }
-                        className="flex-1 py-1.5 px-2.5 rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-xs font-semibold text-[#F8FAFC] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                        className="flex-1 py-1.5 px-2 rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-xs font-semibold text-[#F8FAFC] transition-colors flex items-center justify-center gap-1 cursor-pointer active:scale-95 min-w-0"
                       >
                         {copiedId === project.id ? (
                           <>
-                            <Check size={12} className="text-status-success" />
-                            <span className="text-status-success text-[11px]">Copied</span>
+                            <Check size={12} className="text-status-success shrink-0" />
+                            <span className="text-status-success text-[11px] truncate">Copied</span>
                           </>
                         ) : (
                           <>
-                            <Copy size={12} />
-                            <span className="text-[11px]">Copy PNG</span>
+                            <Copy size={12} className="shrink-0" />
+                            <span className="text-[11px] truncate">Copy PNG</span>
                           </>
                         )}
                       </button>
@@ -651,10 +684,10 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
                             project.id
                           )
                         }
-                        className="flex-1 py-1.5 px-2.5 rounded-[10px] bg-primary/20 hover:bg-primary/35 border border-primary/40 text-xs font-bold text-accent transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                        className="flex-1 py-1.5 px-2 rounded-[10px] bg-primary/20 hover:bg-primary/35 border border-primary/40 text-xs font-bold text-accent transition-colors flex items-center justify-center gap-1 cursor-pointer active:scale-95 min-w-0"
                       >
-                        <Download size={12} />
-                        <span className="text-[11px]">Download</span>
+                        <Download size={12} className="shrink-0" />
+                        <span className="text-[11px] truncate">Download</span>
                       </button>
 
                       {/* Delete Single Button */}

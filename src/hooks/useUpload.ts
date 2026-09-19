@@ -333,9 +333,37 @@ export function useUpload() {
         }
       }
 
-      // 5. Save to client history & database, and notify real-time listeners
+      // 5. Save to database for authenticated user and guarantee persistence
+      let verifiedProjectId = (successData as any).projectId || successData.jobId || `proj-${Date.now()}`;
+      if (session?.user?.email) {
+        try {
+          const saveRes = await fetch("/api/projects", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-email": session.user.email,
+            },
+            body: JSON.stringify({
+              userEmail: session.user.email,
+              originalUrl: successData.originalUrl || file.name,
+              processedUrl: successData.processedUrl,
+              detectedObject: successData.detectedObject || "other",
+            }),
+          });
+          if (saveRes.ok) {
+            const saveJson = await saveRes.json();
+            if (saveJson.project?.id) {
+              verifiedProjectId = saveJson.project.id;
+            }
+          }
+        } catch (dbErr) {
+          console.error("[PROJECT_PERSISTENCE_SYNC_ERROR]", dbErr);
+        }
+      }
+
+      // 6. Save to client history & notify real-time listeners
       const newCutout = {
-        id: successData.jobId || `proj-${Date.now()}`,
+        id: verifiedProjectId,
         originalName: file.name,
         originalUrl: successData.originalUrl || successData.processedUrl,
         cutoutUrl: successData.processedUrl,
@@ -344,6 +372,7 @@ export function useUpload() {
         createdAt: new Date().toISOString(),
         category: successData.detectedObject ? successData.detectedObject.charAt(0).toUpperCase() + successData.detectedObject.slice(1) : "Cutout",
         detectedObject: successData.detectedObject || "other",
+        status: "done",
       };
 
       try {
@@ -365,18 +394,8 @@ export function useUpload() {
         window.dispatchEvent(
           new CustomEvent("cleanpix_project_created", { detail: newCutout })
         );
+        window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
       }
-
-      // Persist to database in background
-      fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          originalUrl: successData.originalUrl || file.name,
-          processedUrl: successData.processedUrl,
-          detectedObject: successData.detectedObject || "other",
-        }),
-      }).catch(() => {});
     } catch (err: any) {
       console.error("[BACKGROUND_REMOVAL_FAILED]", err);
 

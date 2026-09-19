@@ -129,6 +129,11 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         });
         showToast("New cutout added to history.");
       }
+      loadHistory();
+    };
+
+    const handleHistoryRefresh = () => {
+      loadHistory();
     };
 
     const handleProjectDeleted = (e: any) => {
@@ -143,15 +148,17 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     };
 
     window.addEventListener("cleanpix_project_created", handleProjectCreated);
+    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
     window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
     window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
 
     return () => {
       window.removeEventListener("cleanpix_project_created", handleProjectCreated);
+      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
       window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
       window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
     };
-  }, []);
+  }, [loadHistory]);
 
   // ESC key listener
   useEffect(() => {
@@ -166,57 +173,57 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   const handleCopy = async (id: string, url: string) => {
     try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type]: blob }),
-      ]);
-      setCopiedId(id);
-      showToast("Copied to clipboard!");
-      setTimeout(() => setCopiedId(null), 2000);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      let pngBlob = blob;
+      if (blob.type !== "image/png") {
+        pngBlob = new Blob([await blob.arrayBuffer()], { type: "image/png" });
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+        setCopiedId(id);
+        showToast("Copied transparent PNG!");
+        setTimeout(() => setCopiedId(null), 2000);
+      }
     } catch {
-      navigator.clipboard.writeText(window.location.origin + url);
-      setCopiedId(id);
-      showToast("Copied link to clipboard!");
-      setTimeout(() => setCopiedId(null), 2000);
+      showToast("Could not copy image.");
     }
   };
 
   const handleDownload = (url: string, name: string) => {
     const link = document.createElement("a");
     link.href = url;
-    link.download = `cleanpix_${name}`;
+    link.download = `${name.replace(/\.[^/.]+$/, "")}_cleanpix.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Download started.");
   };
 
   const handleDeleteItem = async (id: string) => {
-    // 1. Immediately remove from current UI
+    // 1. Optimistic removal
     setHistoryItems((prev) => prev.filter((item) => item.id !== id));
 
-    // 2. Broadcast deletion
+    // 2. Dispatch event
     window.dispatchEvent(
       new CustomEvent("cleanpix_project_deleted", { detail: { id } })
     );
 
-    // 3. Update localStorage
+    // 3. Clear localStorage
     try {
-      const localData = localStorage.getItem("cleanpix_cutout_history");
-      if (localData) {
-        const parsed = JSON.parse(localData);
+      const stored = localStorage.getItem("cleanpix_cutout_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
         const filtered = parsed.filter((item: any) => item.id !== id);
         localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
       }
     } catch {}
 
-    // 4. Send API request to delete from database
+    // 4. Delete from Supabase
     try {
       await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
-      showToast("Cutout removed.");
+      showToast("Cutout deleted.");
     } catch (err) {
       console.error("[DELETE_ITEM_ERROR]", err);
     }
@@ -226,66 +233,66 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#05060F]/85 backdrop-blur-xl animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 bg-[#05060F]/85 backdrop-blur-xl animate-in fade-in duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="CleanPix Processing History"
     >
       <div
-        className="relative w-full max-w-[760px] max-h-[85vh] rounded-[28px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_20px_60px_rgba(0,0,0,0.7),0_0_40px_rgba(79,124,255,0.25)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-[760px] max-h-[90vh] sm:max-h-[85vh] rounded-[20px] sm:rounded-[28px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_20px_60px_rgba(0,0,0,0.7),0_0_40px_rgba(79,124,255,0.25)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Toast Mini Feedback */}
         {toastMessage && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-pill bg-[#0A0B1E]/95 border border-primary/50 text-[11px] font-semibold text-white shadow-lg animate-in fade-in duration-150 flex items-center gap-1.5">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-pill bg-[#0A0B1E]/95 border border-primary/50 text-[11px] font-semibold text-white shadow-lg animate-in fade-in duration-150 flex items-center gap-1.5">
             <Sparkles size={11} className="text-accent" />
             <span>{toastMessage}</span>
           </div>
         )}
 
         {/* Top Header Bar */}
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0A0B1E]/60 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(34,211,238,0.4)]">
+        <div className="px-3.5 sm:px-6 py-3 sm:py-4 border-b border-white/10 flex items-center justify-between bg-[#0A0B1E]/60 shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(34,211,238,0.4)] shrink-0">
               <History size={14} className="text-accent" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="font-heading font-bold text-base text-white">
+                <h3 className="font-heading font-bold text-sm sm:text-base text-white truncate">
                   History
                 </h3>
-                <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent">
+                <span className="px-2 py-0.5 rounded-pill bg-primary/25 border border-primary/40 text-[10px] font-bold text-accent hidden xs:inline-block truncate max-w-[120px]">
                   {session?.user?.email || "Account"}
                 </span>
               </div>
-              <p className="text-xs text-text-secondary">
-                Recent background removals & exports
+              <p className="text-[11px] sm:text-xs text-text-secondary truncate">
+                Recent background removals &amp; exports
               </p>
             </div>
           </div>
 
           {/* Header Action Buttons: Refresh + Close */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* REFRESH BUTTON IN HEADER */}
             <button
               type="button"
               onClick={() => loadHistory(true)}
               disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-xs font-semibold text-[#F8FAFC] hover:border-primary/40 transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-pill bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-xs font-semibold text-[#F8FAFC] hover:border-primary/40 transition-all cursor-pointer disabled:opacity-50"
               title="Re-fetch latest project records from the database"
             >
               <RefreshCw
                 size={12}
-                className={`text-accent ${isRefreshing ? "animate-spin" : ""}`}
+                className={`text-accent shrink-0 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+              <span className="hidden xs:inline">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-full text-text-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-full text-text-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               aria-label="Close modal"
             >
               <X size={18} />
@@ -294,16 +301,16 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         </div>
 
         {/* History Items Content */}
-        <div className="p-6 overflow-y-auto flex-1 max-h-[55vh] space-y-3">
+        <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 max-h-[60vh] sm:max-h-[55vh] space-y-3">
           {historyItems.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
               {historyItems.map((item) => (
                 <div
                   key={item.id}
-                  className="group rounded-[18px] bg-[#0A0B1E]/90 border border-white/10 hover:border-primary/40 p-3.5 flex flex-col justify-between gap-3 transition-all duration-200 shadow-sm"
+                  className="group rounded-[16px] sm:rounded-[18px] bg-[#0A0B1E]/90 border border-white/10 hover:border-primary/40 p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 sm:gap-3 transition-all duration-200 shadow-sm min-w-0"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="w-16 h-16 rounded-[12px] checkerboard-pattern border border-white/15 overflow-hidden shrink-0 flex items-center justify-center p-1 relative">
+                  <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-[12px] checkerboard-pattern border border-white/15 overflow-hidden shrink-0 flex items-center justify-center p-1 relative">
                       <img
                         src={item.cutoutUrl}
                         alt={item.originalName}
@@ -315,7 +322,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                       <h4 className="text-xs font-bold text-white truncate">
                         {item.originalName}
                       </h4>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <span className="px-2 py-0.5 rounded-pill bg-white/[0.06] text-[10px] font-medium text-text-secondary">
                           {item.category || "Subject"}
                         </span>
@@ -330,7 +337,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleDeleteItem(item.id)}
-                      className="p-1 rounded-full text-text-muted hover:text-red-400 transition-colors cursor-pointer"
+                      className="p-1 rounded-full text-text-muted hover:text-red-400 transition-colors cursor-pointer shrink-0"
                       title="Delete from history"
                     >
                       <Trash2 size={13} />
@@ -338,21 +345,21 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                   </div>
 
                   {/* Actions Row */}
-                  <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-1.5 w-full min-w-0">
                     <button
                       type="button"
                       onClick={() => handleCopy(item.id, item.cutoutUrl)}
-                      className="flex-1 py-1 rounded-[8px] bg-white/[0.04] hover:bg-white/10 border border-white/8 text-[11px] font-medium text-text-secondary hover:text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      className="flex-1 py-1 rounded-[8px] bg-white/[0.04] hover:bg-white/10 border border-white/8 text-[11px] font-medium text-text-secondary hover:text-white transition-colors flex items-center justify-center gap-1 cursor-pointer active:scale-95 min-w-0 truncate"
                     >
                       {copiedId === item.id ? (
                         <>
-                          <Check size={11} className="text-status-success" />
-                          <span className="text-status-success">Copied</span>
+                          <Check size={11} className="text-status-success shrink-0" />
+                          <span className="text-status-success truncate">Copied</span>
                         </>
                       ) : (
                         <>
-                          <Copy size={11} />
-                          <span>Copy</span>
+                          <Copy size={11} className="shrink-0" />
+                          <span className="truncate">Copy</span>
                         </>
                       )}
                     </button>
@@ -360,21 +367,21 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleDownload(item.cutoutUrl, item.originalName)}
-                      className="flex-1 py-1 rounded-[8px] bg-primary/20 hover:bg-primary/30 border border-primary/30 text-[11px] font-bold text-accent transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      className="flex-1 py-1 rounded-[8px] bg-primary/20 hover:bg-primary/30 border border-primary/30 text-[11px] font-bold text-accent transition-colors flex items-center justify-center gap-1 cursor-pointer active:scale-95 min-w-0 truncate"
                     >
-                      <Download size={11} />
-                      <span>Download</span>
+                      <Download size={11} className="shrink-0" />
+                      <span className="truncate">Download</span>
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-14 h-14 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center text-text-muted mb-3">
-                <ImageIcon size={24} />
+            <div className="flex flex-col items-center justify-center py-10 sm:py-12 text-center">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center text-text-muted mb-3">
+                <ImageIcon size={22} />
               </div>
-              <h4 className="font-heading font-bold text-base text-white mb-1">
+              <h4 className="font-heading font-bold text-sm sm:text-base text-white mb-1">
                 No processing history yet
               </h4>
               <p className="text-xs text-text-secondary max-w-xs">
@@ -385,11 +392,11 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 border-t border-white/10 bg-[#0A0B1E]/60 flex items-center justify-between text-xs text-text-muted shrink-0">
+        <div className="px-3.5 sm:px-6 py-3 border-t border-white/10 bg-[#0A0B1E]/60 flex items-center justify-between text-xs text-text-muted shrink-0">
           <Link
             href="/history"
             onClick={onClose}
-            className="flex items-center gap-1.5 text-accent hover:underline font-semibold"
+            className="flex items-center gap-1.5 text-accent hover:underline font-semibold text-[11px] sm:text-xs"
           >
             <span>Open Full History Page</span>
             <ExternalLink size={12} />
@@ -398,7 +405,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-pill bg-white/[0.05] hover:bg-white/10 border border-white/10 font-semibold text-white transition-colors cursor-pointer"
+            className="px-3 sm:px-4 py-1.5 rounded-pill bg-white/[0.05] hover:bg-white/10 border border-white/10 font-semibold text-white transition-colors cursor-pointer text-xs"
           >
             Close
           </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -115,9 +115,13 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch("/api/projects", {
+      const emailQuery = user.email ? `?userEmail=${encodeURIComponent(user.email)}` : "";
+      const res = await fetch(`/api/projects${emailQuery}`, {
         method: "GET",
-        headers: { "Cache-Control": "no-cache" },
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(user.email ? { "x-user-email": user.email } : {}),
+        },
       });
 
       if (res.ok) {
@@ -146,6 +150,41 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     }
   };
 
+  /**
+   * Auto-fetch fresh stats & projects from Supabase in background
+   */
+  const fetchFreshData = useCallback(async () => {
+    try {
+      const emailQuery = user.email ? `?userEmail=${encodeURIComponent(user.email)}` : "";
+      const res = await fetch(`/api/projects${emailQuery}`, {
+        method: "GET",
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(user.email ? { "x-user-email": user.email } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.projects)) {
+          const freshProjects: DashboardProject[] = data.projects;
+          const completedCount = freshProjects.filter(
+            (p) => p.status === "done" || p.processedUrl
+          ).length;
+
+          setRecentProjects(freshProjects.slice(0, 5));
+          setStats((prev) => ({
+            ...prev,
+            totalProjects: freshProjects.length,
+            totalProcessed: completedCount,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("[DASHBOARD_AUTO_SYNC_ERROR]", err);
+    }
+  }, [user.email]);
+
   // Real-time synchronization event listeners across tabs/components
   useEffect(() => {
     const handleProjectCreated = (e: any) => {
@@ -161,6 +200,11 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           totalProcessed: prev.totalProcessed + 1,
         }));
       }
+      fetchFreshData();
+    };
+
+    const handleHistoryRefresh = () => {
+      fetchFreshData();
     };
 
     const handleProjectDeleted = (e: any) => {
@@ -200,6 +244,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     };
 
     window.addEventListener("cleanpix_project_created", handleProjectCreated);
+    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
     window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
     window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
     window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
@@ -207,12 +252,13 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
     return () => {
       window.removeEventListener("cleanpix_project_created", handleProjectCreated);
+      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
       window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
       window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
     };
-  }, []);
+  }, [fetchFreshData]);
 
   /**
    * Delete single project from dashboard
@@ -475,9 +521,9 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         {/* 1. Metric Cards Section */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5 w-full min-w-0">
           {/* Card 1: Total Projects */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+          <div className="rounded-[18px] sm:rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary truncate min-w-0">
                 Total Projects
               </span>
               <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-accent shrink-0">
@@ -485,20 +531,20 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
                 {stats.totalProjects}
               </div>
-              <p className="text-xs text-text-muted mt-1">
+              <p className="text-xs text-text-muted mt-1 truncate">
                 Saved in your workspace
               </p>
             </div>
           </div>
 
           {/* Card 2: Total Images Processed */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+          <div className="rounded-[18px] sm:rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary truncate min-w-0">
                 Images Processed
               </span>
               <div className="w-9 h-9 rounded-full bg-secondary/15 border border-secondary/30 flex items-center justify-center text-[#C084FC] shrink-0">
@@ -506,20 +552,20 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
                 {stats.totalProcessed}
               </div>
-              <p className="text-xs text-text-muted mt-1">
+              <p className="text-xs text-text-muted mt-1 truncate">
                 AI background removals &amp; exports
               </p>
             </div>
           </div>
 
           {/* Card 3: Credits Remaining */}
-          <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4.5 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+          <div className="rounded-[18px] sm:rounded-[20px] bg-[#131A3A]/70 border border-white/10 p-4 sm:p-6 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm hover:border-white/20 transition-all w-full min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary truncate min-w-0">
                 Credits Remaining
               </span>
               <div className="w-9 h-9 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
@@ -527,8 +573,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
               </div>
             </div>
 
-            <div className="flex items-baseline justify-between gap-2 flex-wrap">
-              <div>
+            <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
+              <div className="min-w-0">
                 <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
                   {["pro", "business", "enterprise"].includes(userPlan.toLowerCase())
                     ? "Unlimited"
@@ -575,7 +621,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
             <span>Quick Actions</span>
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
             {/* Quick Action 1: Upload New Image */}
             <Link
               href="/"
@@ -665,11 +711,11 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           </div>
 
           {recentProjects.length > 0 ? (
-            <div className="rounded-[20px] bg-[#131A3A]/70 border border-white/10 overflow-hidden shadow-sm divide-y divide-white/[0.06] w-full min-w-0">
+            <div className="rounded-[18px] sm:rounded-[20px] bg-[#131A3A]/70 border border-white/10 overflow-hidden shadow-sm divide-y divide-white/[0.06] w-full min-w-0">
               {recentProjects.map((project) => (
                 <div
                   key={project.id}
-                  className="p-3.5 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-white/[0.02] transition-colors w-full min-w-0"
+                  className="p-3 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-white/[0.02] transition-colors w-full min-w-0"
                 >
                   {/* Left: Thumbnail & Project Meta */}
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -685,7 +731,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
                     <div className="flex flex-col min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[160px] sm:max-w-xs">
+                        <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs">
                           {project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`}
                         </h4>
                         <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-[10px] font-semibold text-accent uppercase">
@@ -700,10 +746,10 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                   </div>
 
                   {/* Right: Status Pill & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap shrink-0 pt-1 sm:pt-0 border-t border-white/[0.04] sm:border-0">
+                  <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t border-white/[0.06] sm:border-0">
                     {/* Status Badge */}
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${
                         project.status === "done" || project.processedUrl
                           ? "bg-status-success/15 text-status-success border border-status-success/30"
                           : project.status === "processing"
@@ -713,17 +759,17 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                     >
                       {project.status === "done" || project.processedUrl ? (
                         <>
-                          <CheckCircle2 size={12} />
+                          <CheckCircle2 size={11} />
                           <span>Ready</span>
                         </>
                       ) : project.status === "processing" ? (
                         <>
-                          <Loader2 size={12} className="animate-spin" />
+                          <Loader2 size={11} className="animate-spin" />
                           <span>Processing</span>
                         </>
                       ) : (
                         <>
-                          <AlertCircle size={12} />
+                          <AlertCircle size={11} />
                           <span>Failed</span>
                         </>
                       )}
@@ -731,11 +777,11 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
                     {/* Quick Copy, Download & Delete */}
                     {project.processedUrl && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-1 sm:flex-none justify-end">
                         <button
                           type="button"
                           onClick={() => handleCopy(project.id, project.processedUrl!)}
-                          className="px-2.5 py-1 rounded-[8px] bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-medium text-text-secondary hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-1 rounded-[8px] bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-medium text-text-secondary hover:text-white transition-colors flex items-center justify-center gap-1 cursor-pointer flex-1 sm:flex-none"
                           title="Copy PNG to clipboard"
                         >
                           {copiedId === project.id ? (
@@ -746,7 +792,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                           ) : (
                             <>
                               <Copy size={12} />
-                              <span className="hidden xs:inline">Copy</span>
+                              <span>Copy</span>
                             </>
                           )}
                         </button>
@@ -754,7 +800,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDownload(project.processedUrl!, project.id)}
-                          className="px-2.5 py-1 rounded-[8px] bg-primary/15 hover:bg-primary/25 border border-primary/35 text-xs font-semibold text-accent transition-colors flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-1 rounded-[8px] bg-primary/15 hover:bg-primary/25 border border-primary/35 text-xs font-semibold text-accent transition-colors flex items-center justify-center gap-1 cursor-pointer flex-1 sm:flex-none"
                           title="Download cutout"
                         >
                           <Download size={12} />
@@ -765,7 +811,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                           type="button"
                           onClick={() => handleDeleteProject(project.id)}
                           disabled={deleteLoadingId === project.id}
-                          className="p-1 rounded-[8px] text-text-muted hover:text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer disabled:opacity-50"
+                          className="p-1 rounded-[8px] text-text-muted hover:text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                           title="Delete from history"
                         >
                           <Trash2 size={13} />

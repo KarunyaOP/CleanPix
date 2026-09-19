@@ -85,8 +85,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getAuthSession();
+    const body = await request.json().catch(() => ({}));
+    const { originalUrl, processedUrl, detectedObject, userEmail } = body;
+    const headerEmail = request.headers.get("x-user-email");
+    const effectiveEmail = userEmail?.trim()?.toLowerCase() || headerEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!session?.user?.email) {
+    if (!effectiveEmail) {
       return NextResponse.json(
         {
           error: {
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: effectiveEmail },
     });
 
     if (!user) {
@@ -114,9 +118,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const { originalUrl, processedUrl, detectedObject } = body;
-
     if (!originalUrl || !processedUrl) {
       return NextResponse.json(
         {
@@ -127,6 +128,21 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Check if project was already saved during background removal to avoid duplication
+    const existing = await prisma.project.findFirst({
+      where: {
+        userId: user.id,
+        processedUrl: processedUrl,
+      },
+    });
+
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        project: existing,
+      });
     }
 
     // Map detected category to schema enum

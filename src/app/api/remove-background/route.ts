@@ -113,7 +113,31 @@ export async function POST(request: NextRequest) {
         framing
       );
 
-      // 5. Query updated credit balance for response
+      // 6. Automatically save project to Supabase database for authenticated user
+      let savedProject: any = null;
+      if (dbUser) {
+        try {
+          const validObjects = ["person", "product", "pet", "vehicle", "other"];
+          const category = validObjects.includes(result.detectedObject)
+            ? result.detectedObject
+            : "other";
+
+          savedProject = await prisma.project.create({
+            data: {
+              userId: dbUser.id,
+              originalUrl: result.originalUrl || file.name,
+              processedUrl: result.processedUrl,
+              detectedObject: category as any,
+              status: "done",
+            },
+            include: { exports: true },
+          });
+        } catch (dbSaveErr) {
+          console.error("[REMOVE_BG_AUTO_SAVE_ERROR]", dbSaveErr);
+        }
+      }
+
+      // 7. Query updated credit balance for response
       let remainingCredits: number | undefined = undefined;
       if (dbUser) {
         if (isUnlimited) {
@@ -131,6 +155,7 @@ export async function POST(request: NextRequest) {
         {
           success: true,
           ...result,
+          projectId: savedProject?.id || result.jobId,
           creditsRemaining: remainingCredits,
         },
         { status: 200 }

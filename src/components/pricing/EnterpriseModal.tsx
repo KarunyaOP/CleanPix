@@ -49,14 +49,14 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#05060F]/85 backdrop-blur-xl animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#05060F]/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Contact CleanPix Enterprise Sales"
     >
       <div
-        className="relative w-full max-w-[540px] rounded-[28px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_24px_60px_rgba(0,0,0,0.7),0_0_40px_rgba(79,124,255,0.3)] overflow-hidden flex flex-col p-6 sm:p-8 animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-[540px] my-auto rounded-[22px] sm:rounded-[28px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_24px_60px_rgba(0,0,0,0.7),0_0_40px_rgba(79,124,255,0.3)] overflow-hidden flex flex-col p-4 sm:p-8 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Ambient Top Glow */}
