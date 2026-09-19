@@ -103,7 +103,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (isOpen) {

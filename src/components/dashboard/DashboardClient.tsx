@@ -97,7 +97,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   // Synchronize stats and recentProjects when props update from server
   useEffect(() => {
     setStats(initialStats);
-  }, [initialStats.totalProjects, initialStats.totalProcessed, initialStats.creditsRemaining]);
+  }, [initialStats]);
 
   useEffect(() => {
     setRecentProjects(initialRecentProjects);

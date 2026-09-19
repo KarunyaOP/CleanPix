@@ -34,14 +34,27 @@ export interface ToastState {
 const preloadProcessedImage = (
   url: string,
   maxAttempts = 15,
-  intervalMs = 800
+  initialIntervalMs = 600
 ): Promise<string> => {
   return new Promise((resolve) => {
     let attempts = 0;
+    let currentInterval = initialIntervalMs;
+    let isResolved = false;
+
+    // Safety timeout: Never hang processing UI indefinitely
+    const safetyTimeout = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        resolve(url);
+      }
+    }, 20000);
 
     const tryLoad = () => {
+      if (isResolved) return;
       attempts++;
       if (typeof window === "undefined") {
+        isResolved = true;
+        clearTimeout(safetyTimeout);
         return resolve(url);
       }
 
@@ -49,15 +62,23 @@ const preloadProcessedImage = (
       const cacheBustedUrl = `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`;
 
       img.onload = () => {
-        resolve(url);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(safetyTimeout);
+          resolve(url);
+        }
       };
 
       img.onerror = () => {
+        if (isResolved) return;
         if (attempts >= maxAttempts) {
           // If polling reached limit, resolve with url directly so UI renders it
+          isResolved = true;
+          clearTimeout(safetyTimeout);
           resolve(url);
         } else {
-          setTimeout(tryLoad, intervalMs);
+          currentInterval = Math.min(currentInterval * 1.3, 2500);
+          setTimeout(tryLoad, currentInterval);
         }
       };
 
@@ -375,11 +396,8 @@ export function useUpload() {
       setIsUploading(false);
       setIsProcessingAI(false);
     }
-  }, [file, isProcessingAI, clearError, session, updateSession]);
+  }, [file, isProcessingAI, clearError, session, updateSession, framing]);
 
-  /**
-   * On-demand HD Enhancement workflow with session caching
-   */
   /**
    * On-demand HD Enhancement workflow with session caching
    */
@@ -416,7 +434,7 @@ export function useUpload() {
       if (!targetHdUrl) throw new Error("HD transformation URL could not be generated.");
 
       // Preload transformed HD cutout
-      await preloadProcessedImage(targetHdUrl, 20, 800);
+      await preloadProcessedImage(targetHdUrl, 20, 600);
 
       setIsHdReady(true);
       showToast("HD version generated with 2x resolution and enhanced sharpness.", "hd");
@@ -471,7 +489,8 @@ export function useUpload() {
   }, [isHdReady, hdUrl, processedUrl, showToast]);
 
   /**
-   * Dual Quality Download Handler (Standard vs HD)
+   * Dual Quality Resilient Download Handler (Standard vs HD)
+   * Pipeline: Blob Fetch -> Offscreen Canvas -> Direct Link Fallback
    */
   const downloadCutout = useCallback(
     async (quality: "standard" | "hd" = "standard") => {
@@ -484,25 +503,72 @@ export function useUpload() {
 
       showToast(`Download started (${isHd ? "HD Enhanced 2x" : "Standard 1x"}).`, "success");
 
+      // Stage 1: Standard Blob Fetch
       try {
-        const response = await fetch(targetUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = defaultName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+        const response = await fetch(targetUrl, { mode: "cors" });
+        if (response.ok) {
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = defaultName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+          return;
+        }
       } catch {
+        // Continue to Stage 2
+      }
+
+      // Stage 2: Offscreen Canvas Draw
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("Canvas draw failed"));
+          img.src = targetUrl;
+        });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const blob = await new Promise<Blob | null>((resolve) =>
+            canvas.toBlob(resolve, "image/png")
+          );
+          if (blob) {
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = blobUrl;
+            link.download = defaultName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+            return;
+          }
+        }
+      } catch {
+        // Continue to Stage 3
+      }
+
+      // Stage 3: Direct Link Navigation Trigger
+      try {
         const link = document.createElement("a");
         link.href = targetUrl;
         link.target = "_blank";
+        link.rel = "noopener noreferrer";
         link.download = defaultName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+      } catch (err: any) {
+        showToast("Could not download file automatically. Please right-click the image to save.", "error");
       }
     },
     [file, hdUrl, processedUrl, showToast]

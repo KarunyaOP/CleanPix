@@ -109,6 +109,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             duration: shouldReduceMotion ? 0.4 : 0.8,
             ease: [0.16, 1, 0.3, 1],
           }}
+          style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
           className="relative w-44 h-44 sm:w-52 sm:h-52 flex items-center justify-center"
         >
           {shouldReduceMotion ? (

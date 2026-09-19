@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Copy, Check, Sparkles, Loader2, Image as ImageIcon } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Copy, Check, Sparkles, Loader2, Image as ImageIcon, RefreshCw, AlertCircle } from "lucide-react";
 import { SmartBackgroundPreset } from "@/types/schema";
 import { TRANSPARENT_PRESET } from "@/utils/backgroundPresets";
 
@@ -24,13 +24,55 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
   isProcessing = false,
   isHd = false,
   onCopyClipboard,
-  detectedCategory,
   showCopySection = true,
   activePreset = TRANSPARENT_PRESET,
   paddingPercent = 0,
 }) => {
   const [isCopying, setIsCopying] = useState<boolean>(false);
   const [hasCopied, setHasCopied] = useState<boolean>(false);
+
+  // After Image State Tracking
+  const [processedLoading, setProcessedLoading] = useState<boolean>(true);
+  const [processedError, setProcessedError] = useState<boolean>(false);
+  const [retryKey, setRetryKey] = useState<number>(0);
+
+  // Original Image State Tracking
+  const [originalLoading, setOriginalLoading] = useState<boolean>(true);
+  const [originalError, setOriginalError] = useState<boolean>(false);
+
+  // Reset loading & error states when URLs change
+  useEffect(() => {
+    if (processedUrl) {
+      setProcessedLoading(true);
+      setProcessedError(false);
+      setRetryKey(0);
+    }
+  }, [processedUrl, isHd]);
+
+  useEffect(() => {
+    if (originalUrl) {
+      setOriginalLoading(true);
+      setOriginalError(false);
+    }
+  }, [originalUrl]);
+
+  const handleProcessedError = useCallback(() => {
+    if (retryKey < 3) {
+      const nextRetry = retryKey + 1;
+      setTimeout(() => {
+        setRetryKey(nextRetry);
+      }, 1000 * nextRetry);
+    } else {
+      setProcessedLoading(false);
+      setProcessedError(true);
+    }
+  }, [retryKey]);
+
+  const handleManualRetry = useCallback(() => {
+    setProcessedLoading(true);
+    setProcessedError(false);
+    setRetryKey((k) => k + 1);
+  }, []);
 
   const handleCopyClick = async () => {
     if (isCopying) return;
@@ -46,7 +88,14 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
     }
   };
 
-  const isCutoutReady = Boolean(processedUrl);
+  const isCutoutReady = Boolean(processedUrl && !isProcessing);
+
+  // Construct source with retry cache-buster if needed
+  const effectiveProcessedSrc = processedUrl
+    ? retryKey > 0
+      ? `${processedUrl}${processedUrl.includes("?") ? "&" : "?"}_retry=${retryKey}_${Date.now()}`
+      : processedUrl
+    : "";
 
   return (
     <div className="relative w-full max-w-[720px] mx-auto select-none flex flex-col gap-4">
@@ -71,11 +120,23 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
 
           {/* Before Image Container */}
           <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-[#0A0B1E]">
-            {originalUrl ? (
+            {originalLoading && originalUrl && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#0A0B1E] z-10 animate-pulse">
+                <Loader2 size={24} className="text-primary animate-spin opacity-50" />
+              </div>
+            )}
+            {originalUrl && !originalError ? (
               <img
                 src={originalUrl}
                 alt="Before - Original Source"
+                onLoad={() => setOriginalLoading(false)}
+                onError={() => {
+                  setOriginalLoading(false);
+                  setOriginalError(true);
+                }}
                 className={`w-full h-full select-none filter drop-shadow-sm transition-all duration-200 ${
+                  originalLoading ? "opacity-0" : "opacity-100"
+                } ${
                   paddingPercent === 0
                     ? "object-contain object-bottom"
                     : "object-contain object-center"
@@ -129,11 +190,11 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
 
           {/* AI Processing Scanning Overlay */}
           {isProcessing && (
-            <div className="absolute inset-0 z-30 bg-[#0A0B1E]/75 backdrop-blur-md flex flex-col items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 z-30 bg-[#0A0B1E]/80 backdrop-blur-md flex flex-col items-center justify-center pointer-events-none">
               <div className="w-12 h-12 rounded-full bg-primary/25 border border-primary flex items-center justify-center text-accent shadow-[0_0_24px_rgba(79,124,255,0.8)] mb-2.5 animate-spin">
                 <Loader2 size={24} />
               </div>
-              <span className="text-xs font-semibold text-white tracking-wide">
+              <span className="text-xs font-semibold text-white tracking-wide animate-pulse">
                 AI Removing Background...
               </span>
             </div>
@@ -150,12 +211,43 @@ export const ProcessedPreviewCard: React.FC<ProcessedPreviewCardProps> = ({
                 : undefined
             }
           >
-            {processedUrl ? (
+            {/* Loading Shimmer while image renders */}
+            {processedLoading && processedUrl && !isProcessing && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0A0B1E]/60 backdrop-blur-sm z-10">
+                <Loader2 size={28} className="animate-spin text-accent mb-2" />
+                <span className="text-xs font-medium text-white/80">Rendering Cutout...</span>
+              </div>
+            )}
+
+            {processedError ? (
+              <div className="flex flex-col items-center justify-center text-center p-4 z-20">
+                <AlertCircle size={32} className="text-amber-400 mb-2" />
+                <span className="text-xs font-bold text-white mb-1">Image Rendering Delay</span>
+                <span className="text-[11px] text-text-muted mb-3 max-w-[200px]">
+                  Cloudinary AI is finalizing your cutout. Click below to refresh.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleManualRetry}
+                  className="px-3.5 py-1.5 rounded-btn bg-primary hover:bg-primary-hover text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                >
+                  <RefreshCw size={12} />
+                  <span>Reload Cutout</span>
+                </button>
+              </div>
+            ) : processedUrl ? (
               <img
-                key={processedUrl}
-                src={processedUrl}
+                key={effectiveProcessedSrc}
+                src={effectiveProcessedSrc}
                 alt={isHd ? "After - AI Background Removed (HD Enhanced)" : "After - AI Background Removed"}
+                onLoad={() => {
+                  setProcessedLoading(false);
+                  setProcessedError(false);
+                }}
+                onError={handleProcessedError}
                 className={`w-full h-full select-none filter drop-shadow-md transition-all duration-200 ${
+                  processedLoading ? "opacity-0" : "opacity-100"
+                } ${
                   paddingPercent === 0
                     ? "object-contain object-bottom"
                     : "object-contain object-center"
