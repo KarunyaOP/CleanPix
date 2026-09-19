@@ -202,14 +202,14 @@ export const Hero: React.FC = () => {
                   remover. No skills. No hassle. Just results.
                 </p>
 
-                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER (Fixed 420-440px on desktop) */}
+                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER (10-12% more compact on desktop: ~385px) */}
                 <div
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={openFilePicker}
-                  className={`w-full max-w-full lg:max-w-[430px] rounded-[22px] border-2 transition-all duration-200 cursor-pointer p-4 sm:p-5 mb-3 relative overflow-hidden group select-none ${
+                  className={`w-full max-w-full lg:max-w-[385px] rounded-[18px] border-2 transition-all duration-200 cursor-pointer p-3.5 sm:p-4 mb-2.5 relative overflow-hidden group select-none ${
                     isDragging
                       ? "border-primary bg-primary/15 shadow-[0_0_40px_rgba(79,124,255,0.7),inset_0_0_20px_rgba(79,124,255,0.3)] scale-[1.02]"
                       : "border-dashed border-primary/40 bg-[#131A3A]/60 hover:border-primary/80 hover:bg-[#131A3A]/85 hover:shadow-[0_0_30px_rgba(79,124,255,0.25)] backdrop-blur-xl"
@@ -217,21 +217,21 @@ export const Hero: React.FC = () => {
                 >
                   {isDragging ? (
                     /* ACTIVE DRAG-OVER STATE */
-                    <div className="flex flex-col items-center justify-center py-6 text-center animate-in fade-in zoom-in-95 duration-150">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-[0_0_30px_rgba(79,124,255,0.9)] mb-3 animate-bounce">
-                        <UploadCloud size={32} />
+                    <div className="flex flex-col items-center justify-center py-4 text-center animate-in fade-in zoom-in-95 duration-150">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-[0_0_24px_rgba(79,124,255,0.9)] mb-2.5 animate-bounce">
+                        <UploadCloud size={24} />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-heading font-bold text-white mb-1">
+                      <h3 className="text-base sm:text-lg font-heading font-bold text-white mb-1">
                         Drop your image here
                       </h3>
-                      <p className="text-xs text-accent font-medium">
+                      <p className="text-[11px] text-accent font-medium">
                         Release to upload & validate JPG, PNG, or WEBP
                       </p>
                     </div>
                   ) : (
                     /* DEFAULT REST STATE WITH BUTTONS AND HELPER TEXT */
-                    <div className="flex flex-col items-start gap-3.5 w-full">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                    <div className="flex flex-col items-start gap-2.5 sm:gap-3 w-full">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 w-full">
                         {/* 1. Primary Action: Upload Image (Row 1, Col 1) */}
                         <button
                           type="button"
@@ -239,10 +239,10 @@ export const Hero: React.FC = () => {
                             e.stopPropagation();
                             openFilePicker();
                           }}
-                          className="group/btn relative inline-flex items-center justify-center gap-2.5 px-4 h-12 w-full rounded-btn font-heading font-bold text-sm text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_30px_rgba(79,124,255,0.6),0_0_60px_rgba(139,92,246,0.3)] hover:shadow-[0_0_45px_rgba(79,124,255,0.8),0_0_80px_rgba(139,92,246,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer overflow-hidden"
+                          className="group/btn relative inline-flex items-center justify-center gap-2 px-3 h-[42px] w-full rounded-btn font-heading font-bold text-xs sm:text-[13px] text-white bg-gradient-to-r from-[#4F7CFF] to-[#8B5CF6] shadow-[0_0_24px_rgba(79,124,255,0.6),0_0_50px_rgba(139,92,246,0.3)] hover:shadow-[0_0_35px_rgba(79,124,255,0.8),0_0_70px_rgba(139,92,246,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer overflow-hidden"
                         >
                           <div className="absolute inset-x-0 top-0 h-px bg-white/40 pointer-events-none" />
-                          <UploadCloud size={18} className="group-hover/btn:scale-110 transition-transform duration-200 shrink-0" />
+                          <UploadCloud size={16} className="group-hover/btn:scale-110 transition-transform duration-200 shrink-0" />
                           <span className="whitespace-nowrap">Upload Image</span>
                         </button>
 
@@ -253,9 +253,9 @@ export const Hero: React.FC = () => {
                             e.stopPropagation();
                             setIsDemoModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-3.5 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 h-[42px] w-full rounded-btn font-semibold text-xs text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_18px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
                         >
-                          <Play size={14} className="fill-current text-accent shrink-0" />
+                          <Play size={13} className="fill-current text-accent shrink-0" />
                           <span className="whitespace-nowrap">Watch 10s Demo</span>
                         </button>
 
@@ -266,14 +266,14 @@ export const Hero: React.FC = () => {
                             e.stopPropagation();
                             setIsTemplatesModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-3.5 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 h-[42px] w-full rounded-btn font-semibold text-xs text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_18px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
                         >
-                          <Layers size={14} className="text-accent shrink-0" />
+                          <Layers size={13} className="text-accent shrink-0" />
                           <span className="whitespace-nowrap">Explore Templates</span>
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-1 pt-0.5">
+                      <div className="flex items-center gap-1.5 text-[10.5px] sm:text-[11px] text-text-muted font-medium tracking-wide pl-0.5 pt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
                         <span>Drag and drop anywhere in box (Ctrl + V supported)</span>
                       </div>
@@ -282,12 +282,12 @@ export const Hero: React.FC = () => {
                 </div>
 
                 {/* Format & Size Caption */}
-                <p className="text-[11px] sm:text-xs text-text-muted font-medium mb-6 sm:mb-10 pl-1 tracking-wide">
+                <p className="text-[11px] sm:text-xs text-text-muted font-medium mb-5 sm:mb-8 pl-1 tracking-wide">
                   JPG, PNG, WEBP <span className="mx-1">•</span> Max 10MB
                 </p>
 
                 {/* 4-Item Feature Icons / Trust Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full lg:max-w-[430px] pt-5 sm:pt-6 border-t border-white/[0.1]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full lg:max-w-[385px] pt-4 sm:pt-5 border-t border-white/[0.1]">
                   {trustFeatures.map((feature) => {
                     const Icon = feature.icon;
                     return (
