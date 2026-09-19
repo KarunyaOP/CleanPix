@@ -8,6 +8,7 @@ import nodemailer from "nodemailer";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+  secret: process.env.NEXTAUTH_SECRET || "cleanpix_super_secret_jwt_key_9876543210",
   session: {
     strategy: "jwt",
   },
@@ -21,25 +22,39 @@ export const authOptions: NextAuthOptions = {
       allowDangerousEmailAccountLinking: true,
     }),
     EmailProvider({
-      server: process.env.EMAIL_SERVER || {
-        host: process.env.EMAIL_SERVER_HOST || "localhost",
+      server: {
+        host: process.env.EMAIL_SERVER_HOST || "smtp-relay.brevo.com",
         port: Number(process.env.EMAIL_SERVER_PORT) || 587,
-        auth:
-          process.env.EMAIL_SERVER_USER && process.env.EMAIL_SERVER_PASSWORD
-            ? {
-                user: process.env.EMAIL_SERVER_USER,
-                pass: process.env.EMAIL_SERVER_PASSWORD,
-              }
-            : undefined,
+        auth: {
+          user: process.env.EMAIL_SERVER_USER || "",
+          pass: process.env.EMAIL_SERVER_PASSWORD || "",
+        },
       },
       from: process.env.EMAIL_FROM || "CleanPix <no-reply@cleanpix.app>",
       maxAge: 24 * 60 * 60, // 24 hours
       async sendVerificationRequest({ identifier: email, url, provider }) {
         try {
-          const transport = nodemailer.createTransport(provider.server);
+          const host = process.env.EMAIL_SERVER_HOST || (typeof provider.server === "object" ? (provider.server as any).host : "smtp-relay.brevo.com");
+          const port = Number(process.env.EMAIL_SERVER_PORT) || (typeof provider.server === "object" ? Number((provider.server as any).port) : 587);
+          const user = process.env.EMAIL_SERVER_USER || (typeof provider.server === "object" ? (provider.server as any).auth?.user : undefined);
+          const pass = process.env.EMAIL_SERVER_PASSWORD || (typeof provider.server === "object" ? (provider.server as any).auth?.pass : undefined);
+          const from = process.env.EMAIL_FROM || provider.from || "CleanPix <no-reply@cleanpix.app>";
+
+          const transport = nodemailer.createTransport({
+            host,
+            port,
+            secure: port === 465,
+            auth: user && pass ? { user, pass } : undefined,
+            tls: {
+              rejectUnauthorized: false,
+            },
+          });
+
+          console.log(`[NEXTAUTH_EMAIL_SENDING] Sending sign-in magic link to: ${email} via ${host}:${port}`);
+
           const result = await transport.sendMail({
             to: email,
-            from: provider.from,
+            from,
             subject: "Sign in to CleanPix",
             text: `Sign in to CleanPix:\n\n${url}\n\nThis link is valid for 24 hours.\nIf you did not request this email, please ignore it.`,
             html: `
@@ -66,10 +81,15 @@ export const authOptions: NextAuthOptions = {
           if (failed.length) {
             throw new Error(`Email (${failed.join(", ")}) could not be delivered`);
           }
+
+          console.log(`✅ [NEXTAUTH_EMAIL_SENT] Magic link email successfully sent! Message ID: ${result.messageId} | Response: ${result.response}`);
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[CLEANPIX DEV MAGIC LINK URL]: ${url}`);
+          }
         } catch (error: any) {
           console.error("[NEXTAUTH_EMAIL_SEND_FAILED]", {
-            host: typeof provider.server === "object" ? (provider.server as any).host : "SERVER_URL",
-            port: typeof provider.server === "object" ? (provider.server as any).port : undefined,
+            host: process.env.EMAIL_SERVER_HOST,
+            port: process.env.EMAIL_SERVER_PORT,
             message: error.message,
             code: error.code,
           });
