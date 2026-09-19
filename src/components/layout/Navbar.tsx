@@ -28,6 +28,21 @@ export const Navbar: React.FC = () => {
   const hasLiveCreditUpdateRef = useRef<boolean>(false);
   const initializedSessionRef = useRef<boolean>(false);
 
+  // Lock body/background scrolling when mobile navigation menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalBodyOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
+      };
+    }
+  }, [mobileMenuOpen]);
+
   useEffect(() => {
     if (session?.user) {
       if (!hasLiveCreditUpdateRef.current && !initializedSessionRef.current) {
@@ -306,7 +321,7 @@ export const Navbar: React.FC = () => {
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 max-h-[calc(100dvh-68px)] overflow-y-auto overscroll-contain">
             <nav className="flex flex-col space-y-3">
               {navLinks.map((link) => (
                 <a
