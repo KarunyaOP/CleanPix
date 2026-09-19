@@ -142,13 +142,13 @@ export const Hero: React.FC = () => {
         onClose={() => setIsUpgradeModalOpen(false)}
       />
 
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-10 lg:px-16">
+      <div className="max-w-[1320px] mx-auto px-4 sm:px-8 lg:px-12">
         {/* Validation Error Toast */}
         <ValidationToast error={error} onDismiss={clearError} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 xl:grid-cols-[48%_52%] gap-8 lg:gap-10 xl:gap-8 items-center">
           {/* LEFT COLUMN: Results Page Navigation & Options OR Landing Page Copy & Upload Zone */}
-          <div className="lg:col-span-5 flex flex-col items-start text-left z-10 w-full max-w-full lg:max-w-[460px]">
+          <div className="lg:col-span-5 xl:col-span-1 flex flex-col items-start text-left z-10 w-full max-w-full lg:max-w-[430px]">
             {file && previewUrl ? (
               /* RESULTS PAGE: Left Column with Single Back Button & Cards */
               <div className="w-full">
@@ -187,22 +187,22 @@ export const Hero: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Main Headline (Exactly 3 Lines) */}
-                <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-[42px] xl:text-[48px] leading-[1.22] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 max-w-[480px]">
+                {/* Main Headline (Exactly 3 Lines, 0.95-1.0 line-height) */}
+                <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-[42px] xl:text-[46px] leading-[0.98] sm:leading-[1.0] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 max-w-[480px]">
                   Remove <br />
                   Backgrounds <br />
-                  <span className="inline-block mt-1 sm:mt-1.5 text-[0.91em] text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
+                  <span className="inline-block mt-2 sm:mt-2.5 text-[0.91em] text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
                     in Seconds
                   </span>
                 </h1>
 
                 {/* Subcopy */}
-                <p className="text-sm sm:text-base lg:text-[15px] xl:text-base text-text-secondary leading-relaxed max-w-[440px] lg:max-w-[460px] mb-6 sm:mb-8 font-normal">
+                <p className="text-sm sm:text-base lg:text-[15px] xl:text-base text-text-secondary leading-relaxed max-w-[420px] mb-6 sm:mb-8 font-normal">
                   Turn your photos into stunning visuals with our AI-powered background
                   remover. No skills. No hassle. Just results.
                 </p>
 
-                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER (420-440px on desktop) */}
+                {/* INTERACTIVE DRAG-AND-DROP ZONE CONTAINER (Fixed 420-440px on desktop) */}
                 <div
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
@@ -273,7 +273,7 @@ export const Hero: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-0.5 pt-0.5">
+                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-1 pt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
                         <span>Drag and drop anywhere in box (Ctrl + V supported)</span>
                       </div>
@@ -311,10 +311,10 @@ export const Hero: React.FC = () => {
 
           {/* RIGHT COLUMN: Results Preview + Copy PNG OR Landing Preview + Detected Product Panel */}
           <div
-            className={`lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full ${
+            className={`lg:col-span-7 xl:col-span-1 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full ${
               file && previewUrl
-                ? "lg:translate-y-6 xl:translate-y-7"
-                : "lg:-translate-y-5 xl:-translate-y-8"
+                ? "lg:translate-y-5 xl:translate-y-5"
+                : "lg:-translate-y-7 xl:-translate-y-8"
             }`}
           >
             {file && previewUrl ? (
