@@ -114,7 +114,7 @@ export const Navbar: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-[#0A0B1E]/80 backdrop-blur-2xl transition-all duration-200">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-10 lg:px-16 h-16 sm:h-20 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 h-20 flex items-center justify-between">
           {/* Brand Logo */}
           <Link
             href="/"
@@ -123,16 +123,16 @@ export const Navbar: React.FC = () => {
               window.scrollTo({ top: 0, behavior: "smooth" });
               setActiveLink("Home");
             }}
-            className="flex items-center gap-2.5 sm:gap-3.5 group select-none cursor-pointer"
+            className="flex items-center gap-3.5 group select-none cursor-pointer"
           >
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
+            <div className="relative w-10 h-10 transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
               <img
                 src="/branding/logo/cleanpix-icon.svg"
                 alt="CleanPix Brand Icon"
-                className="w-8 h-8 sm:w-10 sm:h-10 object-contain drop-shadow-[0_0_18px_rgba(0,240,255,0.45)]"
+                className="w-10 h-10 object-contain drop-shadow-[0_0_18px_rgba(0,240,255,0.45)]"
               />
             </div>
-            <span className="font-heading font-bold text-xl sm:text-2xl text-[#F8FAFC] tracking-tight group-hover:text-white transition-colors">
+            <span className="font-heading font-bold text-2xl text-[#F8FAFC] tracking-tight group-hover:text-white transition-colors">
               Clean<span className="font-extrabold bg-gradient-to-r from-[#38BDF8] via-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Pix</span>
             </span>
           </Link>
@@ -162,14 +162,14 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Actions - Desktop */}
-          <div className="hidden md:flex items-center gap-3.5">
+          <div className="hidden md:flex items-center gap-3">
             {session?.user ? (
-              /* Authenticated View: Clean Profile Menu (No duplicate top navbar buttons) */
+              /* Authenticated View: Compact Sleek Profile Menu */
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group"
                   aria-expanded={userDropdownOpen}
                   aria-haspopup="true"
                 >
@@ -178,14 +178,14 @@ export const Navbar: React.FC = () => {
                       src={session.user.image}
                       alt={session.user.name || "User"}
                       referrerPolicy="no-referrer"
-                      className="w-7 h-7 rounded-full border border-white/20 object-cover"
+                      className="w-6 h-6 rounded-full border border-white/20 object-cover"
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-accent">
-                      <User size={14} />
+                    <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-accent">
+                      <User size={12} />
                     </div>
                   )}
-                  <span className="text-xs font-semibold text-white truncate max-w-[120px]">
+                  <span className="text-xs font-semibold text-white truncate max-w-[100px]">
                     {session.user.name || session.user.email?.split("@")[0] || "Account"}
                   </span>
                   <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
@@ -205,7 +205,7 @@ export const Navbar: React.FC = () => {
                     </span>
                   )}
                   <ChevronDown
-                    size={13}
+                    size={12}
                     className={`text-text-muted group-hover:text-white transition-transform duration-200 ${
                       userDropdownOpen ? "rotate-180" : ""
                     }`}
@@ -296,7 +296,7 @@ export const Navbar: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-btn bg-[#131A3A] border border-white/15 text-text-secondary hover:text-text-primary hover:border-white/30 transition-colors cursor-pointer"
+              className="p-2.5 rounded-btn bg-[#131A3A] border border-white/15 text-text-secondary hover:text-text-primary hover:border-white/30 transition-colors cursor-pointer"
               aria-label="Toggle navigation menu"
             >
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -306,8 +306,8 @@ export const Navbar: React.FC = () => {
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-4 sm:px-6 py-5 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200">
-            <nav className="flex flex-col space-y-2.5">
+          <div className="md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200">
+            <nav className="flex flex-col space-y-3">
               {navLinks.map((link) => (
                 <a
                   key={link.label}
