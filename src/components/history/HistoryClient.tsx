@@ -494,7 +494,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       </header>
 
       {/* Main Container */}
-      <div className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col w-full min-w-0 max-w-full overflow-x-hidden">
+      <div className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col w-full min-w-0">
         {/* Page Title Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 w-full min-w-0">
           <div className="min-w-0 flex-1">

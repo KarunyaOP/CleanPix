@@ -34,10 +34,21 @@ export const Navbar: React.FC = () => {
   const unlockBodyScroll = useCallback(() => {
     if (typeof document !== "undefined") {
       document.body.style.removeProperty("overflow");
-      document.documentElement.style.removeProperty("overflow");
+      document.body.style.removeProperty("overflow-y");
+      document.body.style.removeProperty("overflow-x");
       document.body.style.removeProperty("touch-action");
+      document.body.style.removeProperty("position");
+      document.body.style.removeProperty("height");
+      document.documentElement.style.removeProperty("overflow");
+      document.documentElement.style.removeProperty("overflow-y");
+      document.documentElement.style.removeProperty("overflow-x");
     }
   }, []);
+
+  // Ensure scroll is completely unlocked on initial mount
+  useEffect(() => {
+    unlockBodyScroll();
+  }, [unlockBodyScroll]);
 
   const closeMobileMenu = useCallback(() => {
     setMobileMenuOpen(false);

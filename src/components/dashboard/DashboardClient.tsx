@@ -387,7 +387,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       </header>
 
       {/* Main Dashboard Body */}
-      <main className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col gap-6 sm:gap-8 w-full min-w-0 max-w-full overflow-x-hidden">
+      <main className="max-w-[1440px] mx-auto px-3.5 sm:px-10 lg:px-16 py-6 sm:py-10 flex-1 flex flex-col gap-6 sm:gap-8 w-full min-w-0">
         {/* User Profile / Welcome Section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-7 rounded-[22px] bg-[#131A3A]/80 border border-white/10 shadow-sm w-full min-w-0">
           {/* Avatar & User Details */}

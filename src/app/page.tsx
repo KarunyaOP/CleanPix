@@ -78,7 +78,7 @@ export default function HomePage() {
   // 1. If access is granted (authenticated or guest), ALWAYS render the main app and NEVER unmount it
   if (isAccessAllowed) {
     return (
-      <main className="flex-1 flex flex-col" id="top">
+      <main className="flex-1 flex flex-col w-full min-w-0" id="top">
         <Navbar />
         <Hero />
         <FeaturesSection />
@@ -96,7 +96,7 @@ export default function HomePage() {
   if (!hasInitialized || status === "loading" || showSplash === null) {
     if (showSplash === true) {
       return (
-        <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center select-none overflow-hidden">
+        <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center select-none">
           <SplashScreen onComplete={handleSplashComplete} durationMs={2550} />
         </main>
       );
@@ -106,7 +106,7 @@ export default function HomePage() {
 
   // 3. User is unauthenticated and not in guest mode -> Render Login Form
   return (
-    <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 select-none overflow-hidden">
+    <main className="relative min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center px-4 sm:px-6 py-12 select-none">
       <LoginForm
         onContinueAsGuest={handleContinueAsGuest}
         animateEntrance={true}

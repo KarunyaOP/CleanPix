@@ -93,7 +93,7 @@ export default function RootLayout({
         />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="bg-[#0A0B1E] text-[#F8FAFC] antialiased min-h-screen w-full max-w-[100vw] relative overflow-x-hidden font-sans selection:bg-primary/40 selection:text-white">
+      <body className="bg-[#0A0B1E] text-[#F8FAFC] antialiased min-h-screen w-full relative font-sans selection:bg-primary/40 selection:text-white">
         {/* Subtle Ambient Background Mesh */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
           {/* Top-Left Blue Ambient Light */}
@@ -111,7 +111,7 @@ export default function RootLayout({
 
         {/* Main Content Tree with NextAuth Session Provider */}
         <AuthProvider>
-          <div className="relative flex flex-col min-h-screen w-full max-w-full min-w-0 overflow-x-hidden">
+          <div className="relative flex flex-col min-h-screen w-full min-w-0">
             {children}
           </div>
         </AuthProvider>
