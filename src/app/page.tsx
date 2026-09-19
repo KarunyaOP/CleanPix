@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/components/providers/AuthProvider";
 import { AnimatePresence } from "framer-motion";
 import { SplashScreen } from "@/components/splash/SplashScreen";
 import { LoginForm } from "@/components/auth/LoginForm";

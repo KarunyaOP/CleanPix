@@ -17,7 +17,7 @@ import {
   FolderArchive,
   Crown,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/components/providers/AuthProvider";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
 interface SettingsModalProps {

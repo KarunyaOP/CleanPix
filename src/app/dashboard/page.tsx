@@ -1,79 +1,68 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { getAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { DashboardClient } from "@/components/dashboard/DashboardClient";
-import { Metadata } from "next";
+"use client";
 
-export const dynamic = "force-dynamic";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "@/components/providers/AuthProvider";
+import { DashboardClient, DashboardProject } from "@/components/dashboard/DashboardClient";
+import { Loader2 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Dashboard — CleanPix",
-  description: "View your image processing statistics, recent projects, and credit balance.",
-};
+export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-export default async function DashboardPage() {
-  // 1. Auth Protection: Verify active NextAuth session
-  const session = await getAuthSession();
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login?callbackUrl=/dashboard");
+    }
+  }, [status, router]);
 
-  if (!session?.user?.email) {
-    redirect("/login?callbackUrl=/dashboard");
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.email) {
+      const emailQuery = `?userEmail=${encodeURIComponent(session.user.email)}`;
+      fetch(`/api/projects${emailQuery}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.projects)) {
+            setProjects(data.projects);
+          }
+        })
+        .catch((err) => console.error("[DASHBOARD_PROJECTS_FETCH_ERROR]", err))
+        .finally(() => setIsLoadingProjects(false));
+    }
+  }, [status, session?.user?.email]);
+
+  if (status === "loading" || (status === "authenticated" && isLoadingProjects)) {
+    return (
+      <div className="min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center gap-3">
+        <Loader2 size={36} className="animate-spin text-accent" />
+        <p className="text-sm font-medium text-text-muted">Loading your CleanPix dashboard...</p>
+      </div>
+    );
   }
 
-  // 2. Query Real Database Values via Prisma ORM
-  const user = await prisma.user.findUnique({
-    where: {
-      email: session.user.email,
-    },
-    include: {
-      projects: {
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: {
-          exports: true,
-        },
-      },
-    },
-  });
-
-  if (!user) {
-    redirect("/login?callbackUrl=/dashboard");
+  if (status === "unauthenticated" || !session?.user) {
+    return <div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />;
   }
 
-  // 3. Compute Real Metrics
-  const totalProjects = user.projects.length;
-  const totalProcessed = user.projects.filter(
-    (p) => p.status === "done" || Boolean(p.processedUrl)
-  ).length;
+  const user = session.user as any;
+  const totalProjects = projects.length;
+  const totalProcessed = projects.filter((p) => p.status === "done" || Boolean(p.processedUrl)).length;
   const creditsRemaining = user.credits ?? 10;
-
-  // 4. Format Recent 5 Projects
-  const recentProjects = user.projects.slice(0, 5).map((p) => ({
-    id: p.id,
-    originalUrl: p.originalUrl,
-    processedUrl: p.processedUrl,
-    detectedObject: p.detectedObject ? String(p.detectedObject) : null,
-    status: p.status,
-    createdAt: p.createdAt.toISOString(),
-    exports: p.exports.map((exp) => ({
-      id: exp.id,
-      format: String(exp.format),
-      url: exp.url,
-    })),
-  }));
+  const recentProjects = projects.slice(0, 5);
 
   return (
     <DashboardClient
       user={{
-        id: user.id,
+        id: user.id || "user",
         name: user.name,
         email: user.email,
         image: user.image,
         credits: creditsRemaining,
         plan: user.plan ?? "free",
-        authProvider: user.authProvider,
-        createdAt: user.createdAt.toISOString(),
+        authProvider: user.authProvider || "email",
+        createdAt: new Date().toISOString(),
       }}
       initialStats={{
         totalProjects,

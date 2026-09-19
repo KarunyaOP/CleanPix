@@ -1,64 +1,56 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { getAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "@/components/providers/AuthProvider";
 import { HistoryClient, ProjectRecord } from "@/components/history/HistoryClient";
-import { Metadata } from "next";
+import { Loader2 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export default function HistoryPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-export const metadata: Metadata = {
-  title: "Processing History — CleanPix",
-  description: "View, copy, and download all your AI-isolated background removals and social exports.",
-};
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login?callbackUrl=/history");
+    }
+  }, [status, router]);
 
-export default async function HistoryPage() {
-  const session = await getAuthSession();
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.email) {
+      const emailQuery = `?userEmail=${encodeURIComponent(session.user.email)}`;
+      fetch(`/api/projects${emailQuery}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.projects)) {
+            setProjects(data.projects);
+          }
+        })
+        .catch((err) => console.error("[HISTORY_PROJECTS_FETCH_ERROR]", err))
+        .finally(() => setIsLoadingProjects(false));
+    }
+  }, [status, session?.user?.email]);
 
-  // If user is not authenticated, redirect to login with callbackUrl
-  if (!session?.user?.email) {
-    redirect("/login?callbackUrl=/history");
+  if (status === "loading" || (status === "authenticated" && isLoadingProjects)) {
+    return (
+      <div className="min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center gap-3">
+        <Loader2 size={36} className="animate-spin text-accent" />
+        <p className="text-sm font-medium text-text-muted">Loading your processing history...</p>
+      </div>
+    );
   }
 
-  // Fetch ALL projects for the authenticated user from PostgreSQL database (no hardcoded limits)
-  const user = await prisma.user.findUnique({
-    where: {
-      email: session.user.email,
-    },
-    include: {
-      projects: {
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: {
-          exports: true,
-        },
-      },
-    },
-  });
-
-  if (!user) {
-    redirect("/login?callbackUrl=/history");
+  if (status === "unauthenticated" || !session?.user) {
+    return <div className="min-h-screen bg-[#0A0B1E]" aria-hidden="true" />;
   }
 
-  // Map database project records for HistoryClient
-  const allProjects: ProjectRecord[] = user.projects.map((p) => ({
-    id: p.id,
-    originalUrl: p.originalUrl,
-    processedUrl: p.processedUrl,
-    detectedObject: p.detectedObject ? String(p.detectedObject) : null,
-    status: p.status,
-    createdAt: p.createdAt.toISOString(),
-    exports: p.exports.map((exp) => ({
-      id: exp.id,
-      format: String(exp.format),
-      url: exp.url,
-    })),
-  }));
+  const user = session.user as any;
 
   return (
     <HistoryClient
-      initialProjects={allProjects}
+      initialProjects={projects}
       initialUser={{
         name: user.name,
         email: user.email,

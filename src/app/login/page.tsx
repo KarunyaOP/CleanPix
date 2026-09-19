@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, Suspense } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/components/providers/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm } from "@/components/auth/LoginForm";
 

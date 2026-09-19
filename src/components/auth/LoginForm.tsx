@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, Mail, ArrowRight, CheckCircle2, Loader2, ShieldCheck, Zap } from "lucide-react";
+import { supabase, getRedirectUrl } from "@/lib/supabaseClient";
 
 interface LoginFormProps {
   onContinueAsGuest?: () => void;
@@ -36,25 +36,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     try {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
-        const urlError = params.get("error");
+        const urlError = params.get("error_description") || params.get("error");
         if (urlError) {
-          console.warn("[AUTH_LOGIN_ERROR_PARAM]", { error: urlError, fullQuery: window.location.search });
-          if (urlError === "EmailSignin" || urlError === "EmailCreateAccount") {
-            setErrorMessage("We couldn't send the magic link right now. Please check your email configuration or try again.");
-          } else if (
-            urlError === "OAuthSignin" ||
-            urlError === "OAuthCallback" ||
-            urlError === "OAuthCreateAccount" ||
-            urlError === "Callback"
-          ) {
-            setErrorMessage("Google authentication could not be completed. Please try again.");
-          } else if (urlError === "Configuration") {
-            setErrorMessage("Authentication service configuration error. Please contact support.");
-          } else if (urlError === "AccessDenied") {
-            setErrorMessage("Access denied. You do not have permission to sign in.");
-          } else {
-            setErrorMessage("Sign-in failed. Please try again.");
-          }
+          console.error("[SUPABASE_AUTH_ERROR_PARAM]", { error: urlError, fullQuery: window.location.search });
+          setErrorMessage(urlError);
         }
       }
     } catch {
@@ -63,12 +48,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   }, []);
 
   /**
-   * Safely resolves and cleans the target callback URL.
-   * Completely prevents URL duplication (e.g. /https://..., https://domain/https://domain).
-   * Respects explicit callbackUrl parameters (/history, /dashboard, /#pricing)
-   * and defaults to the Home editor page ("/") for standard logins.
+   * Safely resolves the redirect URL for Supabase Auth.
+   * Ensures production points to https://cleanpix-one.vercel.app and localhost to origin.
    */
-  const getTargetCallbackUrl = (): string => {
+  const getAuthRedirectUrl = (): string => {
     try {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
@@ -76,79 +59,51 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
         if (raw && typeof raw === "string") {
           let trimmed = raw.trim();
-
-          // 1. If raw contains full URLs or duplicated URLs, parse out the clean internal path
-          while (trimmed.includes("http://") || trimmed.includes("https://")) {
-            const httpIdx = trimmed.indexOf("http://");
-            const httpsIdx = trimmed.indexOf("https://");
-            const earliestIdx =
-              httpIdx === -1 ? httpsIdx : httpsIdx === -1 ? httpIdx : Math.min(httpIdx, httpsIdx);
-
-            const urlSubstr = trimmed.slice(earliestIdx);
-            try {
-              const parsed = new URL(urlSubstr);
-              const internalPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-              if (internalPath.startsWith("/http://") || internalPath.startsWith("/https://")) {
-                trimmed = internalPath;
-              } else {
-                trimmed = internalPath || (guestHref || "/");
-                break;
-              }
-            } catch {
-              trimmed = urlSubstr.replace(/^https?:\/\/[^\/]+/, "") || (guestHref || "/");
-              break;
-            }
-          }
-
-          // 2. Map route shortcuts
           if (trimmed === "pricing" || trimmed === "/pricing") {
-            const target = "/#pricing";
-            console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: target });
-            return target;
+            return getRedirectUrl("/#pricing");
           }
-
-          // 3. Ensure leading slash
-          if (!trimmed.startsWith("/")) {
-            trimmed = `/${trimmed}`;
-          }
-
-          // 4. If callback was /login, fallback to guestHref or "/"
           if (trimmed === "/login") {
-            const target = guestHref || "/";
-            console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: target });
-            return target;
+            return getRedirectUrl(guestHref || "/");
           }
-
-          console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw, resolved: trimmed });
-          return trimmed;
+          if (trimmed.startsWith("/")) {
+            return getRedirectUrl(trimmed);
+          }
         }
       }
     } catch (err) {
-      console.error("[AUTH_CALLBACK_URL_ERROR]", err);
+      console.error("[AUTH_REDIRECT_URL_ERROR]", err);
     }
-
-    const fallback = guestHref || "/";
-    console.log("[AUTH_CALLBACK_URL_RESOLVED]", { raw: null, resolved: fallback });
-    return fallback;
+    return getRedirectUrl(guestHref || "/");
   };
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     setErrorMessage(null);
     try {
-      const callbackUrl = getTargetCallbackUrl();
-      console.log("[SIGN_IN_GOOGLE_TRIGGERED]", { callbackUrl });
-      await signIn("google", { callbackUrl });
+      const redirectTo = getAuthRedirectUrl();
+      console.log("[SUPABASE_SIGNIN_GOOGLE_TRIGGERED]", { redirectTo });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+        },
+      });
+      if (error) {
+        console.error("[SUPABASE_AUTH_ERROR]", error);
+        setErrorMessage(error.message || "Could not sign in with Google. Please try again.");
+        setIsGoogleLoading(false);
+      }
     } catch (err: any) {
-      console.error("[SIGN_IN_GOOGLE_FAILED]", err);
-      setErrorMessage("Could not sign in with Google. Please try again.");
+      console.error("[SUPABASE_AUTH_ERROR]", err);
+      setErrorMessage(err.message || "Could not sign in with Google. Please try again.");
       setIsGoogleLoading(false);
     }
   };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !email.includes("@")) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
       setErrorMessage("Please enter a valid email address.");
       return;
     }
@@ -157,30 +112,27 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setErrorMessage(null);
 
     try {
-      const callbackUrl = getTargetCallbackUrl();
-      const res = await signIn("email", {
-        email,
-        redirect: false,
-        callbackUrl,
+      const emailRedirectTo = getAuthRedirectUrl();
+      console.log("[SUPABASE_SIGNIN_OTP_TRIGGERED]", { email: cleanEmail, emailRedirectTo });
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          emailRedirectTo,
+          shouldCreateUser: true,
+        },
       });
 
-      if (res?.error) {
-        if (res.error === "EmailSignin" || res.error === "EmailCreateAccount") {
-          setErrorMessage(
-            "We couldn't send the magic link right now. Please check your email configuration or try again."
-          );
-        } else if (res.error === "Configuration") {
-          setErrorMessage("Email service configuration issue. Please check your SMTP settings.");
-        } else {
-          setErrorMessage(
-            "We couldn't send the magic link right now. Please check your email configuration or try again."
-          );
-        }
+      if (error) {
+        console.error("[SUPABASE_AUTH_ERROR]", error);
+        setErrorMessage(error.message || "Failed to send magic link. Please try again.");
       } else {
+        console.log("[SUPABASE_AUTH_SUCCESS] Magic link dispatched via Supabase");
         setIsEmailSent(true);
       }
-    } catch {
-      setErrorMessage("An unexpected error occurred. Please try again.");
+    } catch (err: any) {
+      console.error("[SUPABASE_AUTH_ERROR]", err);
+      setErrorMessage(err.message || "An unexpected error occurred. Please try again.");
     } finally {
       setIsEmailLoading(false);
     }

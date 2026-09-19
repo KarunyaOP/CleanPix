@@ -12,8 +12,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthSession();
+    const body = await req.json().catch(() => ({}));
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userEmail } = body;
+    const effectiveEmail = userEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!session?.user?.email) {
+    if (!effectiveEmail) {
       return NextResponse.json(
         { error: "Authentication required to verify payment." },
         { status: 401 }
@@ -27,9 +30,6 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-
-    const body = await req.json();
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json(
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Update User Plan in PostgreSQL
     const updatedUser = await prisma.user.update({
-      where: { email: session.user.email },
+      where: { email: effectiveEmail },
       data: {
         plan: targetPlan,
       },

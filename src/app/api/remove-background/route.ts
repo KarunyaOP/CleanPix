@@ -37,13 +37,15 @@ export async function POST(request: NextRequest) {
 
     // 2. Check User Authentication & Atomic Credit Reservation (concurrency guard for free tier)
     const session = await getAuthSession();
+    const formUserEmail = (formData.get("userEmail") as string)?.trim()?.toLowerCase();
+    const effectiveEmail = formUserEmail || session?.user?.email;
     let dbUser: { id: string; email: string; credits: number; plan: string } | null = null;
     let isUnlimited = false;
     let creditReserved = false;
 
-    if (session?.user?.email) {
+    if (effectiveEmail) {
       dbUser = await prisma.user.findUnique({
-        where: { email: session.user.email },
+        where: { email: effectiveEmail },
         select: { id: true, email: true, credits: true, plan: true },
       });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/components/providers/AuthProvider";
 import { validateImageFile, getImageDimensions } from "@/utils/fileValidation";
 import { classifyImageSubject } from "@/utils/aiDetection";
 import { ApiErrorResponse, DetectedCategory } from "@/types/schema";
@@ -257,6 +257,9 @@ export function useUpload() {
             : 0
         )
       );
+      if (session?.user?.email) {
+        formData.append("userEmail", session.user.email);
+      }
 
       setUploadProgress(50);
 

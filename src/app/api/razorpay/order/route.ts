@@ -11,8 +11,10 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthSession();
+    const body = await req.json().catch(() => ({}));
+    const effectiveEmail = body.userEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!session?.user?.email) {
+    if (!effectiveEmail) {
       return NextResponse.json(
         { error: "Authentication required. Please sign in to upgrade." },
         { status: 401 }
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: effectiveEmail },
       select: { id: true, email: true, name: true, plan: true },
     });
 

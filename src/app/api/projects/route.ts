@@ -12,8 +12,11 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const session = await getAuthSession();
+    const { searchParams } = new URL(request.url);
+    const queryEmail = searchParams.get("userEmail") || request.headers.get("x-user-email");
+    const effectiveEmail = queryEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!session?.user?.email) {
+    if (!effectiveEmail) {
       return NextResponse.json({
         success: true,
         projects: [],
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: effectiveEmail },
     });
 
     if (!user) {
@@ -35,7 +38,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
     const pageParam = searchParams.get("page");

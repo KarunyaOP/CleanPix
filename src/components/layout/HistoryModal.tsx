@@ -15,7 +15,7 @@ import {
   ExternalLink,
   Sparkles,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/components/providers/AuthProvider";
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -23,12 +23,12 @@ interface HistoryModalProps {
   onSelectCutout?: (url: string) => void;
 }
 
-interface HistoryItem {
+export interface HistoryItem {
   id: string;
   originalName: string;
   cutoutUrl: string;
   timestamp: string;
-  category?: string;
+  category: string;
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({
@@ -37,10 +37,10 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onSelectCutout,
 }) => {
   const { data: session } = useSession();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -57,9 +57,13 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
     try {
       // 1. Fetch from /api/projects for authenticated user
-      const res = await fetch("/api/projects", {
+      const emailQuery = session?.user?.email ? `?userEmail=${encodeURIComponent(session.user.email)}` : "";
+      const res = await fetch(`/api/projects${emailQuery}`, {
         method: "GET",
-        headers: { "Cache-Control": "no-cache" },
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+        },
       });
 
       if (res.ok) {

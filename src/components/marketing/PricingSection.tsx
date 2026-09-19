@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/components/providers/AuthProvider";
 import { Check, Sparkles, Zap, Info, Building2, CheckCircle2, X } from "lucide-react";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
