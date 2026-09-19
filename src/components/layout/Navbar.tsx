@@ -114,7 +114,7 @@ export const Navbar: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-[#0A0B1E]/80 backdrop-blur-2xl transition-all duration-200">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-18 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 h-[68px] flex items-center justify-between">
           {/* Brand Logo */}
           <Link
             href="/"
@@ -138,7 +138,7 @@ export const Navbar: React.FC = () => {
           </Link>
 
           {/* Center Nav Links - Desktop */}
-          <nav className="hidden md:flex items-center gap-6 lg:gap-7">
+          <nav className="hidden md:flex items-center gap-4 lg:gap-5">
             {navLinks.map((link) => {
               const isActive = activeLink === link.label;
               return (
@@ -146,7 +146,7 @@ export const Navbar: React.FC = () => {
                   key={link.label}
                   href={link.href}
                   onClick={(e) => handleNavClick(e, link.href, link.label)}
-                  className={`relative py-1.5 text-xs lg:text-sm font-medium tracking-wide transition-all duration-150 cursor-pointer ${
+                  className={`relative py-1 px-1.5 text-xs lg:text-sm font-medium tracking-wide transition-all duration-150 cursor-pointer ${
                     isActive
                       ? "text-[#F8FAFC] font-semibold"
                       : "text-text-secondary hover:text-[#F8FAFC]"
@@ -162,14 +162,14 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Actions - Desktop */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2.5">
             {session?.user ? (
-              /* Authenticated View: Compact Single-Row Sleek Profile Menu */
+              /* Authenticated View: 48px Modern SaaS Profile Pill with 40px Avatar */
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-1.5 lg:gap-2 px-2.5 py-1 rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group text-xs shrink-0"
+                  className="flex items-center gap-1.5 pl-1 pr-2.5 h-[48px] rounded-pill bg-[#131A3A]/90 hover:bg-[#1B2350] border border-primary/35 hover:border-primary/60 shadow-sm transition-all cursor-pointer group shrink-0"
                   aria-expanded={userDropdownOpen}
                   aria-haspopup="true"
                 >
@@ -178,25 +178,25 @@ export const Navbar: React.FC = () => {
                       src={session.user.image}
                       alt={session.user.name || "User"}
                       referrerPolicy="no-referrer"
-                      className="w-5.5 h-5.5 rounded-full border border-white/20 object-cover"
+                      className="w-[40px] h-[40px] rounded-full border border-white/20 object-cover shrink-0"
                     />
                   ) : (
-                    <div className="w-5.5 h-5.5 rounded-full bg-primary/30 flex items-center justify-center text-accent">
-                      <User size={11} />
+                    <div className="w-[40px] h-[40px] rounded-full bg-primary/30 flex items-center justify-center text-accent shrink-0">
+                      <User size={18} />
                     </div>
                   )}
-                  <span className="text-[11px] lg:text-xs font-semibold text-white truncate max-w-[80px] lg:max-w-[95px]">
+                  <span className="text-xs font-semibold text-white truncate max-w-[80px] lg:max-w-[95px] whitespace-nowrap">
                     {session.user.name || session.user.email?.split("@")[0] || "Account"}
                   </span>
-                  <span className={`px-1.5 py-0.5 rounded-pill border text-[9px] font-bold ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
+                  <span className={`px-1.5 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
                     {getPlanBadgeConfig(currentPlan).label}
                   </span>
                   {["pro", "business", "enterprise"].includes(currentPlan.toLowerCase()) ? (
-                    <span className="px-1.5 py-0.5 rounded-pill border text-[9px] font-bold bg-primary/25 border-primary/40 text-accent">
+                    <span className="px-1.5 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 bg-primary/25 border-primary/40 text-accent">
                       Unlimited
                     </span>
                   ) : (
-                    <span className={`px-1.5 py-0.5 rounded-pill border text-[9px] font-bold ${
+                    <span className={`px-1.5 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 ${
                       currentCredits <= 0
                         ? "bg-red-500/20 border-red-500/40 text-red-300"
                         : "bg-primary/25 border-primary/40 text-accent"
@@ -205,8 +205,8 @@ export const Navbar: React.FC = () => {
                     </span>
                   )}
                   <ChevronDown
-                    size={11}
-                    className={`text-text-muted group-hover:text-white transition-transform duration-200 ${
+                    size={12}
+                    className={`text-text-muted group-hover:text-white transition-transform duration-200 shrink-0 ${
                       userDropdownOpen ? "rotate-180" : ""
                     }`}
                   />

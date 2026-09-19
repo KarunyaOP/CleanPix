@@ -187,10 +187,11 @@ export const Hero: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Main Headline (Max 3 lines) */}
-                <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-[42px] xl:text-[48px] leading-[1.14] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 max-w-[480px]">
-                  Remove Backgrounds <br className="hidden sm:inline" />
-                  <span className="text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
+                {/* Main Headline (Exactly 3 Lines) */}
+                <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-[42px] xl:text-[48px] leading-[1.22] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 max-w-[480px]">
+                  Remove <br />
+                  Backgrounds <br />
+                  <span className="inline-block mt-1 sm:mt-1.5 text-[0.91em] text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
                     in Seconds
                   </span>
                 </h1>
@@ -252,7 +253,7 @@ export const Hero: React.FC = () => {
                             e.stopPropagation();
                             setIsDemoModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-4 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer"
+                          className="inline-flex items-center justify-center gap-2 px-3.5 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-accent/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
                         >
                           <Play size={14} className="fill-current text-accent shrink-0" />
                           <span className="whitespace-nowrap">Watch 10s Demo</span>
@@ -265,14 +266,14 @@ export const Hero: React.FC = () => {
                             e.stopPropagation();
                             setIsTemplatesModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center gap-2 px-4 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer"
+                          className="inline-flex items-center justify-center gap-2 px-3.5 h-12 w-full rounded-btn font-medium text-xs sm:text-sm text-[#F8FAFC] bg-[#0A0B1E]/70 border border-white/15 backdrop-blur-md hover:border-primary/40 hover:bg-[#1B2350]/90 hover:shadow-[0_0_20px_rgba(79,124,255,0.2)] transition-all duration-200 cursor-pointer overflow-hidden"
                         >
                           <Layers size={14} className="text-accent shrink-0" />
                           <span className="whitespace-nowrap">Explore Templates</span>
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-0.5">
+                      <div className="flex items-center gap-2 text-[11px] sm:text-xs text-text-muted font-medium tracking-wide pl-0.5 pt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
                         <span>Drag and drop anywhere in box (Ctrl + V supported)</span>
                       </div>
@@ -309,7 +310,7 @@ export const Hero: React.FC = () => {
           </div>
 
           {/* RIGHT COLUMN: Results Preview + Copy PNG OR Landing Preview + Detected Product Panel */}
-          <div className="lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full">
+          <div className="lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 lg:-translate-y-5 xl:-translate-y-8 w-full">
             {file && previewUrl ? (
               /* RESULTS PAGE: Large Processed Image Preview + Copy Transparent PNG Section */
               <div className="w-full max-w-[780px] flex flex-col gap-4">
