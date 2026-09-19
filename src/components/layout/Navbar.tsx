@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "@/components/providers/AuthProvider";
 import {
   Menu,
@@ -17,6 +18,7 @@ import { HistoryModal } from "@/components/layout/HistoryModal";
 import { SettingsModal } from "@/components/dashboard/SettingsModal";
 
 export const Navbar: React.FC = () => {
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeLink, setActiveLink] = useState("Home");
@@ -28,20 +30,39 @@ export const Navbar: React.FC = () => {
   const hasLiveCreditUpdateRef = useRef<boolean>(false);
   const initializedSessionRef = useRef<boolean>(false);
 
-  // Lock body/background scrolling when mobile navigation menu is open
+  // Helper to reliably unlock page scrolling
+  const unlockBodyScroll = useCallback(() => {
+    if (typeof document !== "undefined") {
+      document.body.style.removeProperty("overflow");
+      document.documentElement.style.removeProperty("overflow");
+    }
+  }, []);
+
+  // Ensure scroll is restored on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setUserDropdownOpen(false);
+    unlockBodyScroll();
+  }, [pathname, unlockBodyScroll]);
+
+  // Lock body scrolling ONLY while mobile menu is open, restore cleanly on close/unmount
   useEffect(() => {
     if (mobileMenuOpen) {
-      const originalBodyOverflow = document.body.style.overflow;
-      const originalHtmlOverflow = document.documentElement.style.overflow;
       document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
-
       return () => {
-        document.body.style.overflow = originalBodyOverflow;
-        document.documentElement.style.overflow = originalHtmlOverflow;
+        unlockBodyScroll();
       };
+    } else {
+      unlockBodyScroll();
     }
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, unlockBodyScroll]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      unlockBodyScroll();
+    };
+  }, [unlockBodyScroll]);
 
   useEffect(() => {
     if (session?.user) {
@@ -114,16 +135,21 @@ export const Navbar: React.FC = () => {
     e.preventDefault();
     setActiveLink(label);
     setMobileMenuOpen(false);
+    unlockBodyScroll();
 
-    if (href === "#top" || href === "#") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
+    // Allow DOM to unmount mobile lock before scrolling
+    setTimeout(() => {
+      unlockBodyScroll();
+      if (href === "#top" || href === "#") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
 
-    const targetElement = document.querySelector(href);
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: "smooth" });
-    }
+      const targetElement = document.querySelector(href);
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 50);
   };
 
   return (
@@ -319,116 +345,135 @@ export const Navbar: React.FC = () => {
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu */}
+        {/* Mobile Dropdown Menu & Backdrop */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 max-h-[calc(100dvh-68px)] overflow-y-auto overscroll-contain">
-            <nav className="flex flex-col space-y-3">
-              {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  onClick={(e) => handleNavClick(e, link.href, link.label)}
-                  className={`py-2 px-3.5 rounded-btn text-base font-medium transition-colors cursor-pointer ${
-                    activeLink === link.label
-                      ? "bg-primary/20 text-primary border border-primary/30 font-semibold"
-                      : "text-text-secondary hover:text-white hover:bg-white/[0.05]"
-                  }`}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
+          <>
+            <div
+              className="fixed inset-0 top-[68px] bg-black/60 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-150"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                unlockBodyScroll();
+              }}
+              aria-hidden="true"
+            />
+            <div className="relative z-50 md:hidden border-b border-white/[0.1] bg-[#0A0B1E]/95 backdrop-blur-2xl px-6 py-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 max-h-[calc(100dvh-68px)] overflow-y-auto overscroll-contain">
+              <nav className="flex flex-col space-y-3">
+                {navLinks.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    onClick={(e) => handleNavClick(e, link.href, link.label)}
+                    className={`py-2 px-3.5 rounded-btn text-base font-medium transition-colors cursor-pointer ${
+                      activeLink === link.label
+                        ? "bg-primary/20 text-primary border border-primary/30 font-semibold"
+                        : "text-text-secondary hover:text-white hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </nav>
 
-            <div className="pt-4 border-t border-white/[0.1] flex flex-col gap-3">
-              {session?.user ? (
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between p-2.5 rounded-[12px] bg-[#131A3A] border border-white/10">
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="text-xs font-semibold text-white truncate">
-                        {session.user.name || session.user.email}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-pill border text-[9px] font-bold shrink-0 ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
-                        {getPlanBadgeConfig(currentPlan).label}
-                      </span>
+              <div className="pt-4 border-t border-white/[0.1] flex flex-col gap-3">
+                {session?.user ? (
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between p-2.5 rounded-[12px] bg-[#131A3A] border border-white/10">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-xs font-semibold text-white truncate">
+                          {session.user.name || session.user.email}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-pill border text-[9px] font-bold shrink-0 ${getPlanBadgeConfig(currentPlan).badgeClass}`}>
+                          {getPlanBadgeConfig(currentPlan).label}
+                        </span>
+                      </div>
+                      {["pro", "business", "enterprise"].includes(currentPlan.toLowerCase()) ? (
+                        <span className="px-2 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 bg-primary/20 text-accent border-primary/30">
+                          Unlimited
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 ${
+                          currentCredits <= 0
+                            ? "bg-red-500/20 border-red-500/40 text-red-300"
+                            : "bg-primary/20 text-accent border-primary/30"
+                        }`}>
+                          {currentCredits} credits
+                        </span>
+                      )}
                     </div>
-                    {["pro", "business", "enterprise"].includes(currentPlan.toLowerCase()) ? (
-                      <span className="px-2 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 bg-primary/20 text-accent border-primary/30">
-                        Unlimited
-                      </span>
-                    ) : (
-                      <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold shrink-0 ${
-                        currentCredits <= 0
-                          ? "bg-red-500/20 border-red-500/40 text-red-300"
-                          : "bg-primary/20 text-accent border-primary/30"
-                      }`}>
-                        {currentCredits} credits
-                      </span>
-                    )}
+
+                    {/* 1. Dashboard (Mobile) */}
+                    <Link
+                      href="/dashboard"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        unlockBodyScroll();
+                      }}
+                      className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-primary/20 border border-primary/30 flex items-center gap-2 cursor-pointer"
+                    >
+                      <LayoutDashboard size={14} className="text-accent" />
+                      <span>Dashboard</span>
+                    </Link>
+
+                    {/* 2. History (Mobile) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        unlockBodyScroll();
+                        setIsHistoryModalOpen(true);
+                      }}
+                      className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
+                    >
+                      <History size={14} className="text-accent" />
+                      <span>History</span>
+                    </button>
+
+                    {/* 3. Settings (Mobile) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        unlockBodyScroll();
+                        setIsSettingsModalOpen(true);
+                      }}
+                      className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Sliders size={14} className="text-accent" />
+                      <span>Settings</span>
+                    </button>
+
+                    {/* 4. Sign Out (Mobile) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        unlockBodyScroll();
+                        try {
+                          sessionStorage.removeItem("cleanpix_guest_mode");
+                        } catch {}
+                        signOut({ callbackUrl: "/login" });
+                      }}
+                      className="w-full py-2.5 px-3 rounded-btn text-xs font-medium text-red-300 bg-red-500/10 border border-red-500/25 flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
+                    </button>
                   </div>
-
-                  {/* 1. Dashboard (Mobile) */}
+                ) : (
                   <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-primary/20 border border-primary/30 flex items-center gap-2 cursor-pointer"
+                    href="/login"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      unlockBodyScroll();
+                    }}
+                    className="w-full py-3 rounded-btn text-sm font-semibold text-center text-white bg-[#131A3A] border border-white/20 hover:bg-[#1B2350] hover:border-primary/40 cursor-pointer"
                   >
-                    <LayoutDashboard size={14} className="text-accent" />
-                    <span>Dashboard</span>
+                    Log In
                   </Link>
-
-                  {/* 2. History (Mobile) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setIsHistoryModalOpen(true);
-                    }}
-                    className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
-                  >
-                    <History size={14} className="text-accent" />
-                    <span>History</span>
-                  </button>
-
-                  {/* 3. Settings (Mobile) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setIsSettingsModalOpen(true);
-                    }}
-                    className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
-                  >
-                    <Sliders size={14} className="text-accent" />
-                    <span>Settings</span>
-                  </button>
-
-                  {/* 4. Sign Out (Mobile) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      try {
-                        sessionStorage.removeItem("cleanpix_guest_mode");
-                      } catch {}
-                      signOut({ callbackUrl: "/login" });
-                    }}
-                    className="w-full py-2.5 px-3 rounded-btn text-xs font-medium text-red-300 bg-red-500/10 border border-red-500/25 flex items-center gap-2 cursor-pointer"
-                  >
-                    <LogOut size={14} />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  href="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-full py-3 rounded-btn text-sm font-semibold text-center text-white bg-[#131A3A] border border-white/20 hover:bg-[#1B2350] hover:border-primary/40 cursor-pointer"
-                >
-                  Log In
-                </Link>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </header>
 
