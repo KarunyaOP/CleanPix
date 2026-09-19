@@ -146,9 +146,9 @@ export const Hero: React.FC = () => {
         {/* Validation Error Toast */}
         <ValidationToast error={error} onDismiss={clearError} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-center">
           {/* LEFT COLUMN: Results Page Navigation & Options OR Landing Page Copy & Upload Zone */}
-          <div className="lg:col-span-6 xl:col-span-5 flex flex-col items-start text-left z-10">
+          <div className="lg:col-span-5 flex flex-col items-start text-left z-10 w-full">
             {file && previewUrl ? (
               /* RESULTS PAGE: Left Column with Single Back Button & Cards */
               <div className="w-full">
@@ -188,7 +188,7 @@ export const Hero: React.FC = () => {
                 </div>
 
                 {/* Main Headline */}
-                <h1 className="font-heading font-extrabold text-3xl sm:text-5xl lg:text-[58px] leading-[1.1] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6 break-words">
+                <h1 className="font-heading font-extrabold text-3xl sm:text-5xl lg:text-[48px] xl:text-[56px] leading-[1.12] tracking-tight text-[#F8FAFC] mb-4 sm:mb-6">
                   Remove Backgrounds <br className="hidden sm:inline" />
                   <span className="text-gradient-cyan drop-shadow-[0_0_35px_rgba(34,211,238,0.4)]">
                     in Seconds
@@ -309,10 +309,10 @@ export const Hero: React.FC = () => {
           </div>
 
           {/* RIGHT COLUMN: Results Preview + Copy PNG OR Landing Preview + Detected Product Panel */}
-          <div className="lg:col-span-6 xl:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full">
+          <div className="lg:col-span-7 flex items-center justify-center lg:justify-end z-10 mt-4 lg:mt-0 w-full">
             {file && previewUrl ? (
               /* RESULTS PAGE: Large Processed Image Preview + Copy Transparent PNG Section */
-              <div className="w-full max-w-[720px] flex flex-col gap-4">
+              <div className="w-full max-w-[760px] flex flex-col gap-4">
                 <ProcessedPreviewCard
                   key={isHdReady && hdUrl ? hdUrl : previewUrl}
                   originalUrl={previewUrl}
@@ -326,7 +326,7 @@ export const Hero: React.FC = () => {
               </div>
             ) : (
               /* LANDING PAGE: Static Before / After Demo Showcase + Compact Smart Recommendation Panel */
-              <div className="w-full max-w-[720px] flex flex-col gap-4">
+              <div className="w-full max-w-[760px] flex flex-col gap-4">
                 <ProcessedPreviewCard
                   originalUrl="/images/hero-original.jpg"
                   processedUrl="/images/hero-cutout.jpg"
