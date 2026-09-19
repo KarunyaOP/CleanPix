@@ -641,83 +641,98 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         {/* History Cards Grid */}
         {filteredProjects.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-              {paginatedProjects.map((project) => (
-                <div
-                  key={project.id}
-                  className="group relative rounded-[24px] bg-[#131A3A]/80 hover:bg-[#131A3A] border border-white/12 hover:border-primary/50 p-4 flex flex-col justify-between gap-4 transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:shadow-[0_12px_40px_rgba(79,124,255,0.25)] hover:-translate-y-1"
-                >
-                  {/* Visual Checkerboard Preview Stage */}
-                  <div className="relative aspect-square w-full rounded-[18px] checkerboard-pattern border border-white/15 overflow-hidden flex items-center justify-center p-3 shadow-inner">
-                    <img
-                      src={project.processedUrl || project.originalUrl}
-                      alt="Processed Cutout"
-                      className="w-full h-full object-contain filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] group-hover:scale-105 transition-transform duration-200"
-                    />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-8">
+              {paginatedProjects.map((project) => {
+                const filename = project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`;
+                return (
+                  <div
+                    key={project.id}
+                    className="group relative rounded-[20px] bg-[#131A3A]/80 hover:bg-[#131A3A] border border-white/12 hover:border-primary/50 p-4 flex flex-col justify-between gap-3.5 transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:shadow-[0_12px_40px_rgba(79,124,255,0.25)] hover:-translate-y-0.5"
+                  >
+                    {/* Compact 120x120 Thumbnail Stage */}
+                    <div className="flex flex-col items-center gap-2.5">
+                      <div className="relative w-[120px] h-[120px] rounded-[16px] checkerboard-pattern border border-white/15 overflow-hidden flex items-center justify-center p-1.5 shadow-inner shrink-0 group-hover:border-primary/40 transition-colors">
+                        <img
+                          src={project.processedUrl || project.originalUrl}
+                          alt={filename}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover rounded-[12px] filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-200"
+                        />
 
-                    {/* Category Pill Tag */}
-                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-pill bg-[#0A0B1E]/85 backdrop-blur-md border border-white/15 text-[10px] font-bold text-accent uppercase tracking-wider">
-                      {project.detectedObject || "Cutout"}
-                    </span>
+                        {/* Category Pill Tag */}
+                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-pill bg-[#0A0B1E]/90 backdrop-blur-md border border-white/15 text-[9px] font-bold text-accent uppercase tracking-wider">
+                          {project.detectedObject || "Cutout"}
+                        </span>
+                      </div>
 
-                    {/* Timestamp Tag */}
-                    <span className="absolute bottom-3 left-3 px-2.5 py-0.5 rounded-pill bg-[#0A0B1E]/85 backdrop-blur-md border border-white/15 text-[10px] font-mono font-medium text-text-muted flex items-center gap-1">
-                      <Clock size={10} />
-                      {formatTime(project.createdAt)}
-                    </span>
+                      {/* File Details */}
+                      <div className="flex flex-col items-center text-center w-full min-w-0">
+                        <h4
+                          className="font-heading font-semibold text-xs sm:text-[13px] text-white truncate max-w-full"
+                          title={filename}
+                        >
+                          {filename}
+                        </h4>
+                        <span className="text-[10.5px] text-text-muted mt-0.5 flex items-center gap-1 font-mono">
+                          <Clock size={10} />
+                          {formatTime(project.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card Actions Row */}
+                    <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-1.5">
+                      {/* Copy Button */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopy(project.id, project.processedUrl || project.originalUrl)
+                        }
+                        className="flex-1 py-1.5 px-2.5 rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-xs font-semibold text-[#F8FAFC] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        {copiedId === project.id ? (
+                          <>
+                            <Check size={12} className="text-status-success" />
+                            <span className="text-status-success text-[11px]">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span className="text-[11px]">Copy PNG</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Download Button */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDownload(
+                            project.processedUrl || project.originalUrl,
+                            project.id
+                          )
+                        }
+                        className="flex-1 py-1.5 px-2.5 rounded-[10px] bg-primary/20 hover:bg-primary/35 border border-primary/40 text-xs font-bold text-accent transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <Download size={12} />
+                        <span className="text-[11px]">Download</span>
+                      </button>
+
+                      {/* Delete Single Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(project.id)}
+                        disabled={deleteLoadingId === project.id}
+                        className="p-1.5 rounded-[10px] text-text-muted hover:text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                        title="Delete project from history"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-
-                  {/* Card Actions Row */}
-                  <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2">
-                    {/* Copy Button */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopy(project.id, project.processedUrl || project.originalUrl)
-                      }
-                      className="flex-1 py-2 px-3 rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-xs font-semibold text-[#F8FAFC] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      {copiedId === project.id ? (
-                        <>
-                          <Check size={13} className="text-status-success" />
-                          <span className="text-status-success">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={13} />
-                          <span>Copy PNG</span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Download Button */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDownload(
-                          project.processedUrl || project.originalUrl,
-                          project.id
-                        )
-                      }
-                      className="flex-1 py-2 px-3 rounded-[10px] bg-primary/20 hover:bg-primary/35 border border-primary/40 text-xs font-bold text-accent transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Download size={13} />
-                      <span>Download</span>
-                    </button>
-
-                    {/* Delete Single Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(project.id)}
-                      disabled={deleteLoadingId === project.id}
-                      className="p-2 rounded-[10px] text-text-muted hover:text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-colors cursor-pointer disabled:opacity-50"
-                      title="Delete project from history"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Pagination Controls (when more than 1 page) */}

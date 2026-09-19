@@ -676,6 +676,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                       <img
                         src={project.processedUrl || project.originalUrl}
                         alt="Project Cutout"
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-contain"
                       />
                     </div>
