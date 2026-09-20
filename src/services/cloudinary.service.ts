@@ -182,13 +182,14 @@ export class CloudinaryService {
   }
 
   /**
-   * Quick polling on server to check if Cloudinary has finished the AI transformation
+   * Fast polling on server to check if Cloudinary has finished the AI transformation
    */
   private static async verifyOrPollCloudinaryUrl(
     url: string,
-    maxAttempts = 8,
-    intervalMs = 1200
+    maxAttempts = 12,
+    initialIntervalMs = 350
   ): Promise<void> {
+    let currentInterval = initialIntervalMs;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await fetch(url, { method: "HEAD", cache: "no-store" });
@@ -198,7 +199,8 @@ export class CloudinaryService {
         if (response.status === 423 || response.status === 420 || response.status === 404) {
           // Cloudinary is processing AI model asynchronously
           if (attempt < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+            await new Promise((resolve) => setTimeout(resolve, currentInterval));
+            currentInterval = Math.min(currentInterval * 1.25, 1200);
             continue;
           }
         }

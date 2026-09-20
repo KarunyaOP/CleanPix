@@ -38,70 +38,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<CleanPixUser | null>(null);
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
-  const syncingRef = useRef<boolean>(false);
+  const inFlightSyncRef = useRef<Promise<CleanPixUser | null> | null>(null);
 
   const syncUserProfile = useCallback(async (sbUser: SupabaseUser, token?: string): Promise<CleanPixUser | null> => {
     if (!sbUser.email) return null;
-    try {
-      syncingRef.current = true;
-      const res = await fetch("/api/auth/profile", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          email: sbUser.email,
-          name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
-          image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.user) {
-          const profileUser: CleanPixUser = {
-            id: data.user.id || sbUser.id,
-            email: data.user.email,
-            name: data.user.name || sbUser.user_metadata?.full_name || null,
-            image: data.user.image || sbUser.user_metadata?.avatar_url || null,
-            credits: typeof data.user.credits === "number" ? data.user.credits : 10,
-            plan: data.user.plan || "free",
-            authProvider: data.user.authProvider || "email",
-          };
-          setUser(profileUser);
-          return profileUser;
-        }
-      }
-
-      // If backend fails, only fallback to metadata without fabricating false plan
-      const fallbackUser: CleanPixUser = {
-        id: sbUser.id,
-        email: sbUser.email!,
-        name: sbUser.user_metadata?.full_name || null,
-        image: sbUser.user_metadata?.avatar_url || null,
-        credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-        plan: sbUser.user_metadata?.plan || "free",
-        authProvider: "email",
-      };
-      setUser((prev) => prev || fallbackUser);
-      return fallbackUser;
-    } catch (err) {
-      console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
-      const fallbackUser: CleanPixUser = {
-        id: sbUser.id,
-        email: sbUser.email!,
-        name: sbUser.user_metadata?.full_name || null,
-        image: sbUser.user_metadata?.avatar_url || null,
-        credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-        plan: sbUser.user_metadata?.plan || "free",
-        authProvider: "email",
-      };
-      setUser((prev) => prev || fallbackUser);
-      return fallbackUser;
-    } finally {
-      syncingRef.current = false;
+    if (inFlightSyncRef.current) {
+      return inFlightSyncRef.current;
     }
+
+    const syncPromise = (async () => {
+      try {
+        const res = await fetch("/api/auth/profile", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            email: sbUser.email,
+            name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
+            image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.user) {
+            const profileUser: CleanPixUser = {
+              id: data.user.id || sbUser.id,
+              email: data.user.email,
+              name: data.user.name || sbUser.user_metadata?.full_name || null,
+              image: data.user.image || sbUser.user_metadata?.avatar_url || null,
+              credits: typeof data.user.credits === "number" ? data.user.credits : 10,
+              plan: data.user.plan || "free",
+              authProvider: data.user.authProvider || "email",
+            };
+            setUser(profileUser);
+            return profileUser;
+          }
+        }
+
+        // If backend fails, only fallback to metadata without fabricating false plan
+        const fallbackUser: CleanPixUser = {
+          id: sbUser.id,
+          email: sbUser.email!,
+          name: sbUser.user_metadata?.full_name || null,
+          image: sbUser.user_metadata?.avatar_url || null,
+          credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+          plan: sbUser.user_metadata?.plan || "free",
+          authProvider: "email",
+        };
+        setUser((prev) => prev || fallbackUser);
+        return fallbackUser;
+      } catch (err) {
+        console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
+        const fallbackUser: CleanPixUser = {
+          id: sbUser.id,
+          email: sbUser.email!,
+          name: sbUser.user_metadata?.full_name || null,
+          image: sbUser.user_metadata?.avatar_url || null,
+          credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+          plan: sbUser.user_metadata?.plan || "free",
+          authProvider: "email",
+        };
+        setUser((prev) => prev || fallbackUser);
+        return fallbackUser;
+      } finally {
+        inFlightSyncRef.current = null;
+      }
+    })();
+
+    inFlightSyncRef.current = syncPromise;
+    return syncPromise;
   }, []);
 
   useEffect(() => {

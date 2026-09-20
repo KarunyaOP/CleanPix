@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
           authProvider: "email",
         },
       });
+    } else if (body.name || body.image) {
+      user = await prisma.user.update({
+        where: { email },
+        data: {
+          name: body.name || user.name,
+          image: body.image || user.image,
+        },
+      });
     }
 
     return NextResponse.json({

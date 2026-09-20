@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check User Authentication & Atomic Credit Reservation (concurrency guard for free tier)
-    const session = await getAuthSession();
+    const session = await getAuthSession().catch(() => null);
     const formUserEmail = (formData.get("userEmail") as string)?.trim()?.toLowerCase();
     const formUserId = (formData.get("userId") as string)?.trim();
     const headerEmail = request.headers.get("x-user-email")?.trim()?.toLowerCase();

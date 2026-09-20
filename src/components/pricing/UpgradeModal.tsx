@@ -101,6 +101,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
       const planToTrigger = (isAlreadyPro && initialPlan === "pro") ? "business" : (initialPlan || "pro");
       handlePrimaryClick(planToTrigger);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, autoTrigger]);
 
   // ESC key listener

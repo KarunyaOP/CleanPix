@@ -171,19 +171,15 @@ export const Navbar: React.FC = () => {
     setMobileMenuOpen(false);
     unlockBodyScroll();
 
-    // Allow DOM to unmount mobile lock before scrolling
-    setTimeout(() => {
-      unlockBodyScroll();
-      if (href === "#top" || href === "#") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        return;
-      }
+    if (href === "#top" || href === "#") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
-      const targetElement = document.querySelector(href);
-      if (targetElement) {
-        targetElement.scrollIntoView({ behavior: "smooth" });
-      }
-    }, 50);
+    const targetElement = document.querySelector(href);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   return (

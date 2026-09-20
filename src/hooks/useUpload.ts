@@ -34,7 +34,7 @@ export interface ToastState {
 const preloadProcessedImage = (
   url: string,
   maxAttempts = 15,
-  initialIntervalMs = 600
+  initialIntervalMs = 200
 ): Promise<string> => {
   return new Promise((resolve) => {
     let attempts = 0;
@@ -47,7 +47,7 @@ const preloadProcessedImage = (
         isResolved = true;
         resolve(url);
       }
-    }, 20000);
+    }, 12000);
 
     const tryLoad = () => {
       if (isResolved) return;
@@ -77,7 +77,7 @@ const preloadProcessedImage = (
           clearTimeout(safetyTimeout);
           resolve(url);
         } else {
-          currentInterval = Math.min(currentInterval * 1.3, 2500);
+          currentInterval = Math.min(currentInterval * 1.25, 1200);
           setTimeout(tryLoad, currentInterval);
         }
       };

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * Helper to reliably resolve the authenticated user from Supabase ID, headers, query, body, or NextAuth session
  */
 async function resolveUser(request: NextRequest, body?: any) {
-  const session = await getAuthSession();
+  const session = await getAuthSession().catch(() => null);
   const { searchParams } = new URL(request.url);
 
   const queryId = searchParams.get("userId") || request.headers.get("x-user-id") || body?.userId;
