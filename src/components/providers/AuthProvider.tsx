@@ -40,8 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const syncingRef = useRef<boolean>(false);
 
-  const syncUserProfile = useCallback(async (sbUser: SupabaseUser, token?: string) => {
-    if (!sbUser.email) return;
+  const syncUserProfile = useCallback(async (sbUser: SupabaseUser, token?: string): Promise<CleanPixUser | null> => {
+    if (!sbUser.email) return null;
     try {
       syncingRef.current = true;
       const res = await fetch("/api/auth/profile", {
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         if (data?.user) {
-          setUser({
+          const profileUser: CleanPixUser = {
             id: data.user.id || sbUser.id,
             email: data.user.email,
             name: data.user.name || sbUser.user_metadata?.full_name || null,
@@ -68,56 +68,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             credits: typeof data.user.credits === "number" ? data.user.credits : 10,
             plan: data.user.plan || "free",
             authProvider: data.user.authProvider || "email",
-          });
+          };
+          setUser(profileUser);
+          return profileUser;
         }
-      } else {
-        // Fallback to supabase user metadata
-        setUser((prev) => prev || {
-          id: sbUser.id,
-          email: sbUser.email!,
-          name: sbUser.user_metadata?.full_name || null,
-          image: sbUser.user_metadata?.avatar_url || null,
-          credits: 10,
-          plan: "free",
-          authProvider: "email",
-        });
       }
-    } catch (err) {
-      console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
-      setUser((prev) => prev || {
+
+      // If backend fails, only fallback to metadata without fabricating false plan
+      const fallbackUser: CleanPixUser = {
         id: sbUser.id,
         email: sbUser.email!,
         name: sbUser.user_metadata?.full_name || null,
         image: sbUser.user_metadata?.avatar_url || null,
-        credits: 10,
-        plan: "free",
+        credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+        plan: sbUser.user_metadata?.plan || "free",
         authProvider: "email",
-      });
+      };
+      setUser((prev) => prev || fallbackUser);
+      return fallbackUser;
+    } catch (err) {
+      console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
+      const fallbackUser: CleanPixUser = {
+        id: sbUser.id,
+        email: sbUser.email!,
+        name: sbUser.user_metadata?.full_name || null,
+        image: sbUser.user_metadata?.avatar_url || null,
+        credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+        plan: sbUser.user_metadata?.plan || "free",
+        authProvider: "email",
+      };
+      setUser((prev) => prev || fallbackUser);
+      return fallbackUser;
     } finally {
       syncingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     // 1. Check active session on mount
-    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
+    supabase.auth.getSession().then(async ({ data: { session: initialSession }, error }) => {
+      if (!isMounted) return;
       if (error) {
         console.error("[SUPABASE_GET_SESSION_ERROR]", error);
       }
       if (initialSession?.user) {
-        const initialUser: CleanPixUser = {
-          id: initialSession.user.id,
-          email: initialSession.user.email || "",
-          name: initialSession.user.user_metadata?.full_name || initialSession.user.user_metadata?.name || null,
-          image: initialSession.user.user_metadata?.avatar_url || initialSession.user.user_metadata?.picture || null,
-          credits: 10,
-          plan: "free",
-          authProvider: "email",
-        };
-        setUser((prev) => prev || initialUser);
         setSession(initialSession);
-        setStatus("authenticated");
-        syncUserProfile(initialSession.user, initialSession.access_token);
+        // Hydrate real database profile BEFORE setting status to authenticated
+        await syncUserProfile(initialSession.user, initialSession.access_token);
+        if (isMounted) {
+          setStatus("authenticated");
+        }
       } else {
         setSession(null);
         setUser(null);
@@ -130,25 +132,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       console.log(`[SUPABASE_AUTH_EVENT] ${event}`, { email: currentSession?.user?.email });
+      if (!isMounted) return;
 
-      if (currentSession?.user) {
-        const currentAuthUser: CleanPixUser = {
-          id: currentSession.user.id,
-          email: currentSession.user.email || "",
-          name: currentSession.user.user_metadata?.full_name || currentSession.user.user_metadata?.name || null,
-          image: currentSession.user.user_metadata?.avatar_url || currentSession.user.user_metadata?.picture || null,
-          credits: 10,
-          plan: "free",
-          authProvider: "email",
-        };
-        setUser((prev) => prev || currentAuthUser);
-        setSession(currentSession);
-        setStatus("authenticated");
-        await syncUserProfile(currentSession.user, currentSession.access_token);
-      } else {
+      if (event === "SIGNED_OUT" || !currentSession?.user) {
         setSession(null);
         setUser(null);
         setStatus("unauthenticated");
+        return;
+      }
+
+      if (currentSession?.user) {
+        setSession(currentSession);
+        await syncUserProfile(currentSession.user, currentSession.access_token);
+        if (isMounted) {
+          setStatus("authenticated");
+        }
       }
     });
 
@@ -168,6 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
@@ -246,28 +245,17 @@ export const useAuth = () => useContext(AuthContext);
  */
 export const useSession = () => {
   const { user, session, status, update } = useContext(AuthContext);
-  const resolvedUser =
-    user ||
-    (session?.user
-      ? {
-          id: session.user.id,
-          email: session.user.email || "",
-          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || null,
-          image: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || null,
-          credits: 10,
-          plan: "free",
-          authProvider: "email",
-        }
-      : null);
+
+  const isReady = status === "authenticated" && Boolean(user);
 
   return {
-    data: resolvedUser
+    data: isReady
       ? {
-          user: resolvedUser,
+          user: user!,
           expires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : "",
         }
       : null,
-    status,
+    status: isReady ? "authenticated" : status === "unauthenticated" ? "unauthenticated" : "loading",
     update,
   };
 };

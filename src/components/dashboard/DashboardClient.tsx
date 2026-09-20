@@ -109,10 +109,20 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   }, [initialRecentProjects]);
 
   useEffect(() => {
-    if (user.plan) {
+    if (session?.user) {
+      if ((session.user as any).plan) {
+        setUserPlan((session.user as any).plan);
+      }
+      if (typeof (session.user as any).credits === "number") {
+        setStats((prev) => ({
+          ...prev,
+          creditsRemaining: (session.user as any).credits,
+        }));
+      }
+    } else if (user.plan) {
       setUserPlan(user.plan);
     }
-  }, [user.plan]);
+  }, [session?.user, user.plan]);
 
   /**
    * Auto-fetch fresh stats & projects from Supabase in background

@@ -85,6 +85,20 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     setProjects(initialProjects);
   }, [initialProjects]);
 
+  useEffect(() => {
+    if (session?.user) {
+      if ((session.user as any).plan) {
+        setLivePlan((session.user as any).plan);
+      }
+      if (typeof (session.user as any).credits === "number") {
+        setLiveCredits((session.user as any).credits);
+      }
+    } else if (initialUser) {
+      if (initialUser.plan) setLivePlan(initialUser.plan);
+      if (typeof initialUser.credits === "number") setLiveCredits(initialUser.credits);
+    }
+  }, [session?.user, initialUser]);
+
   /**
    * Auto-fetch fresh history records from Supabase in background
    */

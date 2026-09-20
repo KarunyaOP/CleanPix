@@ -25,10 +25,11 @@ export const Navbar: React.FC = () => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [currentCredits, setCurrentCredits] = useState<number>(10);
-  const [currentPlan, setCurrentPlan] = useState<string>("free");
-  const hasLiveCreditUpdateRef = useRef<boolean>(false);
-  const initializedSessionRef = useRef<boolean>(false);
+  const [liveCredits, setLiveCredits] = useState<number | null>(null);
+  const [livePlan, setLivePlan] = useState<string | null>(null);
+
+  const currentPlan = livePlan || (session?.user as any)?.plan || "free";
+  const currentCredits = liveCredits ?? (session?.user as any)?.credits ?? 0;
 
   // Helper to reliably unlock page scrolling
   const unlockBodyScroll = useCallback(() => {
@@ -105,19 +106,14 @@ export const Navbar: React.FC = () => {
 
   useEffect(() => {
     if (session?.user) {
-      if (!hasLiveCreditUpdateRef.current && !initializedSessionRef.current) {
-        if (typeof (session.user as any).credits === "number") {
-          setCurrentCredits((session.user as any).credits);
-          initializedSessionRef.current = true;
-        }
-      } else if (hasLiveCreditUpdateRef.current && typeof (session.user as any).credits === "number") {
-        setCurrentCredits((session.user as any).credits);
+      if (typeof (session.user as any).credits === "number") {
+        setLiveCredits((session.user as any).credits);
       }
       if ((session.user as any).plan) {
-        setCurrentPlan((session.user as any).plan);
+        setLivePlan((session.user as any).plan);
       }
     }
-  }, [session]);
+  }, [session?.user]);
 
   const getPlanBadgeConfig = (plan: string = "free") => {
     const p = plan.toLowerCase();
@@ -142,14 +138,13 @@ export const Navbar: React.FC = () => {
   useEffect(() => {
     const handleCreditsUpdated = (e: any) => {
       if (typeof e.detail?.credits === "number") {
-        hasLiveCreditUpdateRef.current = true;
-        setCurrentCredits(e.detail.credits);
+        setLiveCredits(e.detail.credits);
       }
     };
 
     const handlePlanUpdated = (e: any) => {
       if (e.detail?.plan) {
-        setCurrentPlan(e.detail.plan);
+        setLivePlan(e.detail.plan);
       }
     };
 
