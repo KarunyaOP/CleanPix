@@ -80,11 +80,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Synchronize state when server re-renders (e.g. after router.refresh())
-  useEffect(() => {
-    setProjects(initialProjects);
-  }, [initialProjects]);
-
   useEffect(() => {
     if (session?.user) {
       if ((session.user as any).plan) {
@@ -159,7 +154,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         if (data.success && Array.isArray(data.projects)) {
           setProjects(data.projects);
           showToast("History refreshed from database.");
-          router.refresh();
           return;
         }
       }
@@ -298,8 +292,10 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         } catch {}
       }
 
+      // 4. Fetch fresh history from Supabase
+      await fetchFreshHistory();
+
       showToast("Cutout deleted from database.");
-      router.refresh();
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
       showToast(err.message || "Failed to delete cutout. Please try again.");
@@ -345,8 +341,10 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         } catch {}
       }
 
+      // 4. Re-fetch from Supabase to confirm empty state
+      await fetchFreshHistory();
+
       showToast("All processing history deleted permanently.");
-      router.refresh();
     } catch (err: any) {
       console.error("[DELETE_ALL_ERROR]", err);
       showToast(err.message || "Failed to delete all history.");

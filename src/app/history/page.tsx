@@ -9,8 +9,6 @@ import { Loader2 } from "lucide-react";
 export default function HistoryPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [projects, setProjects] = useState<ProjectRecord[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -18,37 +16,7 @@ export default function HistoryPage() {
     }
   }, [status, router]);
 
-  const sessionUserEmail = session?.user?.email;
-  const sessionUserId = session?.user?.id;
-
-  useEffect(() => {
-    if (status === "authenticated" && (sessionUserEmail || sessionUserId)) {
-      const email = sessionUserEmail || "";
-      const userId = sessionUserId || "";
-      const emailQuery = email ? `userEmail=${encodeURIComponent(email)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      fetch(url, {
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(email ? { "x-user-email": email } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && Array.isArray(data.projects)) {
-            setProjects(data.projects);
-          }
-        })
-        .catch((err) => console.error("[HISTORY_PROJECTS_FETCH_ERROR]", err))
-        .finally(() => setIsLoadingProjects(false));
-    }
-  }, [status, sessionUserEmail, sessionUserId]);
-
-  if (status === "loading" || (status === "authenticated" && isLoadingProjects)) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center gap-3">
         <Loader2 size={36} className="animate-spin text-accent" />
@@ -65,7 +33,7 @@ export default function HistoryPage() {
 
   return (
     <HistoryClient
-      initialProjects={projects}
+      initialProjects={[]}
       initialUser={{
         name: user.name,
         email: user.email,

@@ -99,15 +99,6 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     }
   }, []);
 
-  // Synchronize stats and recentProjects when props update from server
-  useEffect(() => {
-    setStats(initialStats);
-  }, [initialStats]);
-
-  useEffect(() => {
-    setRecentProjects(initialRecentProjects);
-  }, [initialRecentProjects]);
-
   useEffect(() => {
     if (session?.user) {
       if ((session.user as any).plan) {
@@ -173,7 +164,6 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     try {
       await fetchFreshData();
       showToast("Dashboard refreshed from database.");
-      router.refresh();
     } catch (err) {
       console.error("[DASHBOARD_REFRESH_ERROR]", err);
       showToast("Could not refresh dashboard.");
@@ -196,6 +186,11 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       const deletedId = e.detail?.id;
       if (deletedId) {
         setRecentProjects((prev) => prev.filter((p) => p.id !== deletedId));
+        setStats((prev) => ({
+          ...prev,
+          totalProjects: Math.max(0, prev.totalProjects - 1),
+          totalProcessed: Math.max(0, prev.totalProcessed - 1),
+        }));
       }
       fetchFreshData();
     };
@@ -266,8 +261,13 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         throw new Error(errorData.error?.message || "Failed to delete project from database.");
       }
 
-      // 1. Update local state
+      // 1. Update local state immediately
       setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+      setStats((prev) => ({
+        ...prev,
+        totalProjects: Math.max(0, prev.totalProjects - 1),
+        totalProcessed: Math.max(0, prev.totalProcessed - 1),
+      }));
 
       // 2. Broadcast events to History views
       window.dispatchEvent(
@@ -287,11 +287,10 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         } catch {}
       }
 
-      // 4. Fetch fresh stats directly from Supabase
+      // 4. Fetch fresh stats directly from Supabase to guarantee exact synchronization
       await fetchFreshData();
 
       showToast("Project deleted from database.");
-      router.refresh();
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
       showToast(err.message || "Failed to delete project.");
