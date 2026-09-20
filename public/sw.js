@@ -1,4 +1,4 @@
-const CACHE_NAME = "cleanpix-cache-v1";
+const CACHE_NAME = "cleanpix-cache-v2";
 const OFFLINE_FALLBACK_URL = "/offline";
 
 const PRECACHE_ASSETS = [
@@ -48,39 +48,48 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests or chrome-extension schemes
+  // 1. Skip non-GET requests or chrome-extension / non-http schemes
   if (request.method !== "GET" || !url.protocol.startsWith("http")) {
     return;
   }
 
-  // Skip Razorpay, Cloudinary uploads, and auth API requests from caching
+  // 2. Network-only: NEVER cache API routes, auth, Supabase, Cloudinary, or Razorpay
   if (
-    url.pathname.startsWith("/api/razorpay") ||
-    url.pathname.startsWith("/api/auth") ||
-    url.pathname.startsWith("/api/remove-background") ||
-    url.pathname.startsWith("/api/upload")
+    url.pathname.startsWith("/api/") ||
+    url.hostname.includes("supabase.co") ||
+    url.hostname.includes("razorpay.com") ||
+    url.hostname.includes("res.cloudinary.com") ||
+    url.hostname.includes("googleusercontent.com")
   ) {
     return;
   }
 
-  // HTML page navigations -> Network first with Offline fallback
+  // 3. HTML page navigations -> Network first with Cache / Offline fallback
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedResponse = await cache.match(request);
-        if (cachedResponse) return cachedResponse;
-        const fallback = await cache.match(OFFLINE_FALLBACK_URL);
-        if (fallback) return fallback;
-        return new Response("You are currently offline.", {
-          headers: { "Content-Type": "text/plain" },
-        });
-      })
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedResponse = await cache.match(request);
+          if (cachedResponse) return cachedResponse;
+          const fallback = await cache.match(OFFLINE_FALLBACK_URL);
+          if (fallback) return fallback;
+          return new Response("You are currently offline.", {
+            headers: { "Content-Type": "text/plain" },
+          });
+        })
     );
     return;
   }
 
-  // Static Assets (fonts, images, scripts, styles) -> Cache first with network fallback
+  // 4. Static Assets (icons, branding, images, fonts, svgs) -> Cache first with network fallback
   if (
     url.pathname.startsWith("/branding/") ||
     url.pathname.startsWith("/icons/") ||
@@ -107,7 +116,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // All other requests -> Network first with Cache fallback
+  // 5. All other assets -> Network first with Cache fallback
   event.respondWith(
     fetch(request)
       .then((networkResponse) => {

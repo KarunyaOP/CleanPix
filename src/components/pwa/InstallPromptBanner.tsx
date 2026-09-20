@@ -12,13 +12,13 @@ export const InstallPromptBanner: React.FC = () => {
   const [isIos, setIsIos] = useState<boolean>(false);
   const [showIosInstructions, setShowIosInstructions] = useState<boolean>(false);
   const [showDesktopHint, setShowDesktopHint] = useState<boolean>(false);
-  
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Check if running in standalone mode (already installed as PWA)
+    // 1. Check if running in standalone mode (already installed as PWA)
     const isStandaloneMode =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true;
@@ -28,7 +28,7 @@ export const InstallPromptBanner: React.FC = () => {
       return;
     }
 
-    // Check if dismissed in this session
+    // 2. Check if dismissed in this session
     try {
       const dismissed = sessionStorage.getItem("cleanpix_pwa_dismissed");
       if (dismissed === "true") {
@@ -39,30 +39,55 @@ export const InstallPromptBanner: React.FC = () => {
       // Ignore storage error
     }
 
-    // Detect iOS
+    // 3. Detect iOS Safari
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIos(isIosDevice);
 
-    // Listen to beforeinstallprompt (Android Chrome, Edge, Samsung Internet)
+    // 4. Retrieve any prompt captured prior to component mount
+    if ((window as any).__cleanpix_deferred_prompt) {
+      setDeferredPrompt((window as any).__cleanpix_deferred_prompt);
+    }
+
+    // 5. Listen to beforeinstallprompt and custom installable events
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      (window as any).__cleanpix_deferred_prompt = e;
       setDeferredPrompt(e);
     };
 
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    const handlePwaInstallable = (e: any) => {
+      if (e.detail) {
+        setDeferredPrompt(e.detail);
+      }
+    };
 
-    // Mount banner on landing page and make visible
+    const handleAppInstalled = () => {
+      setIsStandalone(true);
+      setDeferredPrompt(null);
+      (window as any).__cleanpix_deferred_prompt = null;
+      handleDismiss();
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("cleanpix_pwa_installable", handlePwaInstallable);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    window.addEventListener("cleanpix_pwa_installed", handleAppInstalled);
+
+    // Mount banner and show
     setIsMounted(true);
     setIsVisible(true);
 
-    // 5-second automatic close countdown
+    // Optional 10-second auto-close timer with pause capability
     timerRef.current = setTimeout(() => {
       handleDismiss();
-    }, 5000);
+    }, 10000);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("cleanpix_pwa_installable", handlePwaInstallable);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      window.removeEventListener("cleanpix_pwa_installed", handleAppInstalled);
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -93,13 +118,23 @@ export const InstallPromptBanner: React.FC = () => {
       timerRef.current = null;
     }
 
-    if (deferredPrompt) {
-      // Trigger native install prompt
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setDeferredPrompt(null);
-        handleDismiss();
+    const promptEvent =
+      deferredPrompt || (typeof window !== "undefined" ? (window as any).__cleanpix_deferred_prompt : null);
+
+    if (promptEvent && typeof promptEvent.prompt === "function") {
+      try {
+        // Trigger native browser install prompt directly from user click
+        await promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult && choiceResult.outcome === "accepted") {
+          setDeferredPrompt(null);
+          if (typeof window !== "undefined") {
+            (window as any).__cleanpix_deferred_prompt = null;
+          }
+          handleDismiss();
+        }
+      } catch (err) {
+        console.warn("[PWA] Install prompt error:", err);
       }
     } else if (isIos) {
       setShowIosInstructions((prev) => !prev);
@@ -117,14 +152,20 @@ export const InstallPromptBanner: React.FC = () => {
     <aside
       role="status"
       aria-label="Install CleanPix App"
+      onMouseEnter={() => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      }}
       className="fixed bottom-4 inset-x-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md z-50 p-4 pt-4.5 rounded-[22px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_16px_40px_rgba(0,0,0,0.7),0_0_24px_rgba(79,124,255,0.3)] backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 select-none pointer-events-auto overflow-hidden"
     >
-      {/* 5-second animated countdown progress line */}
+      {/* Animated countdown progress line */}
       <div className="absolute top-0 inset-x-0 h-[2.5px] bg-white/10 overflow-hidden">
         <div
           className="h-full bg-gradient-to-r from-primary via-accent to-secondary"
           style={{
-            animation: "pwaCountdown 5s linear forwards",
+            animation: "pwaCountdown 10s linear forwards",
           }}
         />
       </div>
@@ -179,7 +220,7 @@ export const InstallPromptBanner: React.FC = () => {
                 <span>To install in your browser:</span>
               </p>
               <p className="text-[10px] text-text-secondary">
-                Click the <strong className="text-white">Install (⊕)</strong> icon in your browser address bar.
+                Click the <strong className="text-white">Install (⊕)</strong> icon in your browser address bar or menu.
               </p>
             </div>
           )}

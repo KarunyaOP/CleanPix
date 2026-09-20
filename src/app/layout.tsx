@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
+import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 import { getMetadataBase, getSiteUrl } from "@/lib/siteUrl";
 
 export const viewport: Viewport = {
@@ -68,8 +69,8 @@ export const metadata: Metadata = {
       { url: "/branding/favicon/favicon.svg", type: "image/svg+xml" },
       { url: "/branding/favicon/favicon-32x32.png", sizes: "32x32", type: "image/png" },
       { url: "/branding/favicon/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/branding/favicon/favicon-192x192.png", sizes: "192x192", type: "image/png" },
-      { url: "/branding/favicon/favicon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [
       { url: "/branding/favicon/apple-touch-icon.png", sizes: "192x192", type: "image/png" },
@@ -91,7 +92,11 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap"
           rel="stylesheet"
         />
+        <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#0A0B1E" />
       </head>
       <body className="bg-[#0A0B1E] text-[#F8FAFC] antialiased min-h-screen w-full relative font-sans selection:bg-primary/40 selection:text-white">
         {/* Subtle Ambient Background Mesh */}
@@ -108,6 +113,9 @@ export default function RootLayout({
 
         {/* PWA Lifecycle & Connectivity Handler */}
         <PwaRegister />
+
+        {/* Global PWA Install Prompt Banner */}
+        <InstallPromptBanner />
 
         {/* Main Content Tree with NextAuth Session Provider */}
         <AuthProvider>
