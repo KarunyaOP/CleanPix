@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
-import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 import { getMetadataBase, getSiteUrl } from "@/lib/siteUrl";
 
 export const viewport: Viewport = {
@@ -113,9 +112,6 @@ export default function RootLayout({
 
         {/* PWA Lifecycle & Connectivity Handler */}
         <PwaRegister />
-
-        {/* Global PWA Install Prompt Banner */}
-        <InstallPromptBanner />
 
         {/* Main Content Tree with NextAuth Session Provider */}
         <AuthProvider>

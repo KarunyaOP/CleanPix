@@ -12,6 +12,7 @@ import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { FaqSection } from "@/components/marketing/FaqSection";
 import { Footer } from "@/components/layout/Footer";
+import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 
 export default function HomePage() {
   const { status } = useSession();
@@ -85,6 +86,7 @@ export default function HomePage() {
         <PricingSection />
         <FaqSection />
         <Footer />
+        <InstallPromptBanner />
       </main>
     );
   }

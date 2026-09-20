@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Download, X, Smartphone, Share2, Info } from "lucide-react";
 
 export const InstallPromptBanner: React.FC = () => {
+  const pathname = usePathname();
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
@@ -15,10 +17,13 @@ export const InstallPromptBanner: React.FC = () => {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  // 1. Strictly enforce landing-page-only visibility
+  const isLandingPage = pathname === "/" || pathname === "";
 
-    // 1. Check if running in standalone mode (already installed as PWA)
+  useEffect(() => {
+    if (typeof window === "undefined" || !isLandingPage) return;
+
+    // Check if running in standalone mode (already installed as PWA)
     const isStandaloneMode =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true;
@@ -28,7 +33,7 @@ export const InstallPromptBanner: React.FC = () => {
       return;
     }
 
-    // 2. Check if dismissed in this session
+    // Check if dismissed in this session
     try {
       const dismissed = sessionStorage.getItem("cleanpix_pwa_dismissed");
       if (dismissed === "true") {
@@ -39,17 +44,17 @@ export const InstallPromptBanner: React.FC = () => {
       // Ignore storage error
     }
 
-    // 3. Detect iOS Safari
+    // Detect iOS Safari
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIos(isIosDevice);
 
-    // 4. Retrieve any prompt captured prior to component mount
+    // Retrieve any prompt captured prior to component mount
     if ((window as any).__cleanpix_deferred_prompt) {
       setDeferredPrompt((window as any).__cleanpix_deferred_prompt);
     }
 
-    // 5. Listen to beforeinstallprompt and custom installable events
+    // Listen to beforeinstallprompt and custom installable events
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       (window as any).__cleanpix_deferred_prompt = e;
@@ -74,14 +79,14 @@ export const InstallPromptBanner: React.FC = () => {
     window.addEventListener("appinstalled", handleAppInstalled);
     window.addEventListener("cleanpix_pwa_installed", handleAppInstalled);
 
-    // Mount banner and show
+    // Mount banner and make visible
     setIsMounted(true);
     setIsVisible(true);
 
-    // Optional 10-second auto-close timer with pause capability
+    // Exact 5-second automatic dismiss timer
     timerRef.current = setTimeout(() => {
       handleDismiss();
-    }, 10000);
+    }, 5000);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -93,7 +98,18 @@ export const InstallPromptBanner: React.FC = () => {
         timerRef.current = null;
       }
     };
-  }, []);
+  }, [isLandingPage]);
+
+  // If route changes away from landing page, immediately hide/clear
+  useEffect(() => {
+    if (!isLandingPage) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setIsVisible(false);
+    }
+  }, [isLandingPage]);
 
   const handleDismiss = () => {
     if (timerRef.current) {
@@ -112,7 +128,7 @@ export const InstallPromptBanner: React.FC = () => {
   };
 
   const handleInstallClick = async () => {
-    // Clear auto-close timer so user has time to view instructions or prompt
+    // Clear auto-close timer on user interaction
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -143,8 +159,8 @@ export const InstallPromptBanner: React.FC = () => {
     }
   };
 
-  // Do not render before client mount, if already installed, or if dismissed
-  if (!isMounted || isStandalone || isDismissed || !isVisible) {
+  // Do not render if not on landing page, before client mount, if already installed, or if dismissed
+  if (!isLandingPage || !isMounted || isStandalone || isDismissed || !isVisible) {
     return null;
   }
 
@@ -152,20 +168,14 @@ export const InstallPromptBanner: React.FC = () => {
     <aside
       role="status"
       aria-label="Install CleanPix App"
-      onMouseEnter={() => {
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
-      }}
       className="fixed bottom-4 inset-x-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md z-50 p-4 pt-4.5 rounded-[22px] bg-[#131A3A]/95 border border-primary/40 shadow-[0_16px_40px_rgba(0,0,0,0.7),0_0_24px_rgba(79,124,255,0.3)] backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 select-none pointer-events-auto overflow-hidden"
     >
-      {/* Animated countdown progress line */}
+      {/* 5-second animated countdown progress line */}
       <div className="absolute top-0 inset-x-0 h-[2.5px] bg-white/10 overflow-hidden">
         <div
           className="h-full bg-gradient-to-r from-primary via-accent to-secondary"
           style={{
-            animation: "pwaCountdown 10s linear forwards",
+            animation: "pwaCountdown 5s linear forwards",
           }}
         />
       </div>
