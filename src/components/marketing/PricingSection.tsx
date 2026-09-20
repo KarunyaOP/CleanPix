@@ -12,6 +12,7 @@ export const PricingSection: React.FC = () => {
   const { data: session, status } = useSession();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [modalPlan, setModalPlan] = useState<"pro" | "business">("pro");
+  const [autoTriggerModal, setAutoTriggerModal] = useState<boolean>(false);
   const [cancelToast, setCancelToast] = useState(false);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
   const [livePlan, setLivePlan] = useState<string | null>(null);
@@ -51,6 +52,61 @@ export const PricingSection: React.FC = () => {
   const isBusiness = activePlan === "business" || activePlan === "enterprise";
   const isPro = activePlan === "pro";
   const isFree = !isPro && !isBusiness;
+
+  // Auto-resume pending plan when user returns authenticated from login
+  useEffect(() => {
+    if (isLoggedIn && typeof window !== "undefined") {
+      let pending: string | null = null;
+      try {
+        pending = sessionStorage.getItem("cleanpix_pending_plan");
+      } catch {}
+
+      if (!pending) {
+        const match = document.cookie.match(/(?:^|;\s*)cleanpix_pending_plan=([^;]+)/);
+        if (match) {
+          pending = decodeURIComponent(match[1]);
+        }
+      }
+
+      if (!pending) {
+        const searchParams = new URLSearchParams(window.location.search);
+        pending = searchParams.get("plan");
+      }
+
+      if (!pending && window.location.hash.includes("?")) {
+        const hashQuery = new URLSearchParams(window.location.hash.split("?")[1]);
+        pending = hashQuery.get("plan");
+      }
+
+      if (pending && (pending === "pro" || pending === "business")) {
+        const targetPlan = pending as "pro" | "business";
+        // Clear storage/cookie
+        try {
+          sessionStorage.removeItem("cleanpix_pending_plan");
+          document.cookie = "cleanpix_pending_plan=; path=/; max-age=0";
+        } catch {}
+
+        // Clean URL search parameters without reloading
+        try {
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.has("plan") || currentUrl.searchParams.has("redirect")) {
+            currentUrl.searchParams.delete("plan");
+            currentUrl.searchParams.delete("redirect");
+            window.history.replaceState({}, "", currentUrl.toString());
+          }
+        } catch {}
+
+        // Check if user doesn't already have the target plan
+        if (isBusiness || (isPro && targetPlan === "pro")) {
+          return;
+        }
+
+        setModalPlan(targetPlan);
+        setAutoTriggerModal(true);
+        setIsUpgradeModalOpen(true);
+      }
+    }
+  }, [isLoggedIn, isBusiness, isPro]);
 
   const showNotice = (msg: string) => {
     setPlanNotice(msg);
@@ -167,7 +223,11 @@ export const PricingSection: React.FC = () => {
 
     if (planId === "pro") {
       if (!isLoggedIn) {
-        router.push("/login?redirect=pricing");
+        try {
+          sessionStorage.setItem("cleanpix_pending_plan", "pro");
+          document.cookie = "cleanpix_pending_plan=pro; path=/; max-age=3600; SameSite=Lax";
+        } catch {}
+        router.push("/login?redirect=pricing&plan=pro");
         return;
       }
 
@@ -182,15 +242,20 @@ export const PricingSection: React.FC = () => {
         return;
       }
 
-      // Free user upgrading to Pro
+      // Free user upgrading to Pro - directly open checkout modal
       setModalPlan("pro");
+      setAutoTriggerModal(true);
       setIsUpgradeModalOpen(true);
       return;
     }
 
     if (planId === "business") {
       if (!isLoggedIn) {
-        router.push("/login?redirect=pricing");
+        try {
+          sessionStorage.setItem("cleanpix_pending_plan", "business");
+          document.cookie = "cleanpix_pending_plan=business; path=/; max-age=3600; SameSite=Lax";
+        } catch {}
+        router.push("/login?redirect=pricing&plan=business");
         return;
       }
 
@@ -200,8 +265,9 @@ export const PricingSection: React.FC = () => {
         return;
       }
 
-      // Free or Pro user upgrading to Business
+      // Free or Pro user upgrading to Business - directly open checkout modal
       setModalPlan("business");
+      setAutoTriggerModal(true);
       setIsUpgradeModalOpen(true);
       return;
     }
@@ -338,8 +404,12 @@ export const PricingSection: React.FC = () => {
       {/* Upgrade Modal with dynamic plan selection */}
       <UpgradeModal
         isOpen={isUpgradeModalOpen}
-        onClose={() => setIsUpgradeModalOpen(false)}
+        onClose={() => {
+          setIsUpgradeModalOpen(false);
+          setAutoTriggerModal(false);
+        }}
         initialPlan={modalPlan}
+        autoTrigger={autoTriggerModal}
       />
     </>
   );

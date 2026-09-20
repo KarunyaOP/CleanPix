@@ -20,6 +20,7 @@ export interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialPlan?: "pro" | "business";
+  autoTrigger?: boolean;
   title?: string;
   description?: string;
   badge?: string;
@@ -57,6 +58,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
   isOpen,
   onClose,
   initialPlan = "pro",
+  autoTrigger = false,
   title,
   description,
   badge,
@@ -93,6 +95,14 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
     }
   }, [isOpen, initialPlan, isAlreadyPro]);
 
+  // Auto-trigger Razorpay Checkout if requested and user is authenticated
+  useEffect(() => {
+    if (isOpen && autoTrigger && session?.user?.email && !isLoading && !isSuccess) {
+      const planToTrigger = (isAlreadyPro && initialPlan === "pro") ? "business" : (initialPlan || "pro");
+      handlePrimaryClick(planToTrigger);
+    }
+  }, [isOpen, autoTrigger]);
+
   // ESC key listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -104,8 +114,9 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose, isLoading]);
 
-  const handlePrimaryClick = async () => {
+  const handlePrimaryClick = async (targetPlanOverride?: "pro" | "business") => {
     if (isLoading || isSuccess) return;
+    const planToCheckout = targetPlanOverride || selectedPlan;
 
     if (onAction) {
       onAction();
@@ -125,18 +136,32 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
       return;
     }
 
+    const userEmail = session?.user?.email || "";
+    const userId = session?.user?.id || "";
+    const userName = session?.user?.name || "";
+
+    // If not authenticated, save pending plan and redirect to login
+    if (!userEmail) {
+      try {
+        sessionStorage.setItem("cleanpix_pending_plan", planToCheckout);
+        document.cookie = `cleanpix_pending_plan=${planToCheckout}; path=/; max-age=3600; SameSite=Lax`;
+      } catch {}
+      window.location.href = `/login?redirect=pricing&plan=${planToCheckout}`;
+      return;
+    }
+
     // Plan Guard: Prevent duplicate order creation
     if (isAlreadyBusiness) {
       setErrorMessage("You already have the Business plan.");
       return;
     }
 
-    if (selectedPlan === "pro" && isAlreadyPro) {
+    if (planToCheckout === "pro" && isAlreadyPro) {
       setErrorMessage("You already have the Pro plan.");
       return;
     }
 
-    // Razorpay One-Time Payment Flow for selectedPlan (Pro ₹99 or Business ₹399)
+    // Razorpay One-Time Payment Flow for planToCheckout (Pro ₹99 or Business ₹399)
     try {
       setIsLoading(true);
       setErrorMessage(null);
@@ -152,15 +177,26 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
         },
-        body: JSON.stringify({ plan: selectedPlan }),
+        body: JSON.stringify({
+          plan: planToCheckout,
+          userEmail,
+          userId,
+          userName,
+        }),
       });
 
       const orderData = await orderResponse.json();
 
       if (!orderResponse.ok) {
         if (orderResponse.status === 401) {
-          window.location.href = "/login?redirect=pricing";
+          try {
+            sessionStorage.setItem("cleanpix_pending_plan", planToCheckout);
+            document.cookie = `cleanpix_pending_plan=${planToCheckout}; path=/; max-age=3600; SameSite=Lax`;
+          } catch {}
+          window.location.href = `/login?redirect=pricing&plan=${planToCheckout}`;
           return;
         }
         throw new Error(orderData.error || "Failed to initialize payment order.");
@@ -172,9 +208,9 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
         throw new Error("Invalid payment order received from server.");
       }
 
-      const planName = selectedPlan === "business" ? "CleanPix Business" : "CleanPix Pro Creator";
+      const planName = planToCheckout === "business" ? "CleanPix Business" : "CleanPix Pro Creator";
       const planDesc =
-        selectedPlan === "business"
+        planToCheckout === "business"
           ? "Business - Unlimited AI Removals, Priority Queue & Commercial Rights"
           : "Pro Creator - Unlimited AI Background Removal";
 
@@ -188,11 +224,11 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
         image: "/branding/logo/cleanpix-icon.svg",
         order_id: orderId,
         prefill: {
-          name: session?.user?.name || orderData.user?.name || "",
-          email: session?.user?.email || orderData.user?.email || "",
+          name: userName || orderData.user?.name || "",
+          email: userEmail || orderData.user?.email || "",
         },
         theme: {
-          color: selectedPlan === "business" ? "#F59E0B" : "#4F7CFF",
+          color: planToCheckout === "business" ? "#F59E0B" : "#4F7CFF",
         },
         modal: {
           ondismiss: () => {
@@ -212,12 +248,17 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(userEmail ? { "x-user-email": userEmail } : {}),
+                ...(userId ? { "x-user-id": userId } : {}),
               },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                plan: selectedPlan,
+                plan: planToCheckout,
+                userEmail,
+                userId,
+                userName,
               }),
             });
 
@@ -232,12 +273,12 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
             setIsLoading(false);
 
             if (typeof updateSession === "function") {
-              await updateSession({ plan: selectedPlan }).catch(() => {});
+              await updateSession({ plan: planToCheckout }).catch(() => {});
             }
 
             if (typeof window !== "undefined") {
               window.dispatchEvent(
-                new CustomEvent("cleanpix_plan_updated", { detail: { plan: selectedPlan } })
+                new CustomEvent("cleanpix_plan_updated", { detail: { plan: planToCheckout } })
               );
               window.dispatchEvent(
                 new CustomEvent("cleanpix_credits_updated", { detail: { credits: 999999 } })
@@ -560,7 +601,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
               <button
                 type="button"
                 disabled={isLoading || isCurrentPlanSelected}
-                onClick={handlePrimaryClick}
+                onClick={() => handlePrimaryClick()}
                 className={`w-full py-3.5 px-4 rounded-btn font-heading font-bold text-sm text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none ${
                   isCurrentPlanSelected
                     ? "bg-white/[0.1] text-white/80 border border-white/20"

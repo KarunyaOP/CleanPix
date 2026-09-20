@@ -379,6 +379,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
         initialPlan={upgradeModalPlan}
+        autoTrigger={true}
       />
 
       {/* Dashboard Top Header Navigation */}

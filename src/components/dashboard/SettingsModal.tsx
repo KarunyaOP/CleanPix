@@ -543,6 +543,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         isOpen={isUpgradeOpen}
         onClose={() => setIsUpgradeOpen(false)}
         initialPlan={upgradePlanTarget}
+        autoTrigger={true}
       />
     </>
   );

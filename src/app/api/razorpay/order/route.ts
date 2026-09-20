@@ -6,15 +6,25 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/razorpay/order
- * Creates a one-time Razorpay Order for Pro Creator upgrade
+ * Creates a one-time Razorpay Order for Pro Creator or Business upgrade
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession().catch(() => null);
     const body = await req.json().catch(() => ({}));
-    const effectiveEmail = body.userEmail?.trim()?.toLowerCase() || session?.user?.email;
 
-    if (!effectiveEmail) {
+    // Support email/id from request body, custom headers, or server session
+    const effectiveEmail =
+      body.userEmail?.trim()?.toLowerCase() ||
+      req.headers.get("x-user-email")?.trim()?.toLowerCase() ||
+      session?.user?.email;
+
+    const effectiveId =
+      body.userId?.trim() ||
+      req.headers.get("x-user-id")?.trim() ||
+      (session?.user as any)?.id;
+
+    if (!effectiveEmail && !effectiveId) {
       return NextResponse.json(
         { error: "Authentication required. Please sign in to upgrade." },
         { status: 401 }
@@ -33,10 +43,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: effectiveEmail },
+    // Look up user in database by ID or Email
+    let user = await prisma.user.findFirst({
+      where: effectiveEmail
+        ? { email: effectiveEmail }
+        : { id: effectiveId! },
       select: { id: true, email: true, name: true, plan: true },
     });
+
+    // Auto-upsert if user authenticated in Supabase but not yet present in Prisma
+    if (!user && effectiveEmail) {
+      user = await prisma.user.upsert({
+        where: { email: effectiveEmail },
+        update: {},
+        create: {
+          id: effectiveId || undefined,
+          email: effectiveEmail,
+          name: body.userName || session?.user?.name || "CleanPix Member",
+          credits: 10,
+          plan: "free",
+        },
+        select: { id: true, email: true, name: true, plan: true },
+      });
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -46,12 +75,9 @@ export async function POST(req: NextRequest) {
     }
 
     let targetPlan: "pro" | "business" = "pro";
-    try {
-      const body = await req.json().catch(() => ({}));
-      if (body?.plan?.toLowerCase() === "business") {
-        targetPlan = "business";
-      }
-    } catch {}
+    if (body?.plan?.toLowerCase() === "business") {
+      targetPlan = "business";
+    }
 
     const currentPlan = (user.plan || "free").toLowerCase();
 
@@ -120,6 +146,7 @@ export async function POST(req: NextRequest) {
       plan: targetPlan,
       receipt: data.receipt,
       user: {
+        id: user.id,
         name: user.name,
         email: user.email,
       },

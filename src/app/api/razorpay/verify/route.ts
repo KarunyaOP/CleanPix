@@ -11,12 +11,19 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession().catch(() => null);
     const body = await req.json().catch(() => ({}));
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userEmail } = body;
-    const effectiveEmail = userEmail?.trim()?.toLowerCase() || session?.user?.email;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userEmail, userId } = body;
+    const effectiveEmail =
+      userEmail?.trim()?.toLowerCase() ||
+      req.headers.get("x-user-email")?.trim()?.toLowerCase() ||
+      session?.user?.email;
+    const effectiveId =
+      userId?.trim() ||
+      req.headers.get("x-user-id")?.trim() ||
+      (session?.user as any)?.id;
 
-    if (!effectiveEmail) {
+    if (!effectiveEmail && !effectiveId) {
       return NextResponse.json(
         { error: "Authentication required to verify payment." },
         { status: 401 }
@@ -84,29 +91,53 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Update User Plan in PostgreSQL
-    const updatedUser = await prisma.user.update({
-      where: { email: effectiveEmail },
-      data: {
-        plan: targetPlan,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        plan: true,
-        credits: true,
-      },
-    });
+    let updatedUser;
+    if (effectiveEmail) {
+      updatedUser = await prisma.user.upsert({
+        where: { email: effectiveEmail },
+        update: {
+          plan: targetPlan,
+        },
+        create: {
+          id: effectiveId || undefined,
+          email: effectiveEmail,
+          name: body.userName || "CleanPix Member",
+          credits: 10,
+          plan: targetPlan,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          plan: true,
+          credits: true,
+        },
+      });
+    } else if (effectiveId) {
+      updatedUser = await prisma.user.update({
+        where: { id: effectiveId },
+        data: {
+          plan: targetPlan,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          plan: true,
+          credits: true,
+        },
+      });
+    }
 
     const planDisplayName = targetPlan === "business" ? "CleanPix Business" : "CleanPix Pro Creator";
 
     return NextResponse.json({
       success: true,
-      plan: updatedUser.plan,
+      plan: updatedUser?.plan || targetPlan,
       user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
+        id: updatedUser?.id,
+        email: updatedUser?.email,
+        name: updatedUser?.name,
       },
       message: `Payment successfully verified! Your account has been upgraded to ${planDisplayName}.`,
     });

@@ -32,10 +32,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       // Ignore storage errors
     }
 
-    // Check URL query error parameters
+    // Check URL query parameters for plan preservation and errors
     try {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
+        const plan = params.get("plan");
+        if (plan && (plan === "pro" || plan === "business")) {
+          sessionStorage.setItem("cleanpix_pending_plan", plan);
+          document.cookie = `cleanpix_pending_plan=${plan}; path=/; max-age=3600; SameSite=Lax`;
+        }
+
         const urlError = params.get("error_description") || params.get("error");
         if (urlError) {
           console.error("[SUPABASE_AUTH_ERROR_PARAM]", { error: urlError, fullQuery: window.location.search });
@@ -56,18 +62,33 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const raw = params.get("callbackUrl") || params.get("redirect");
+        const plan = params.get("plan") || sessionStorage.getItem("cleanpix_pending_plan");
+
+        if (plan && (plan === "pro" || plan === "business")) {
+          try {
+            sessionStorage.setItem("cleanpix_pending_plan", plan);
+            document.cookie = `cleanpix_pending_plan=${plan}; path=/; max-age=3600; SameSite=Lax`;
+          } catch {}
+        }
 
         if (raw && typeof raw === "string") {
           let trimmed = raw.trim();
-          if (trimmed === "pricing" || trimmed === "/pricing") {
-            return getRedirectUrl("/#pricing");
+          if (trimmed === "pricing" || trimmed === "/pricing" || trimmed === "#pricing" || trimmed === "/#pricing") {
+            const planParam = plan ? `?plan=${encodeURIComponent(plan)}` : "";
+            return getRedirectUrl(`/#pricing${planParam}`);
           }
           if (trimmed === "/login") {
             return getRedirectUrl(guestHref || "/");
           }
           if (trimmed.startsWith("/")) {
-            return getRedirectUrl(trimmed);
+            const separator = trimmed.includes("?") ? "&" : "?";
+            const planParam = plan ? `${separator}plan=${encodeURIComponent(plan)}` : "";
+            return getRedirectUrl(`${trimmed}${planParam}`);
           }
+        }
+
+        if (plan) {
+          return getRedirectUrl(`/#pricing?plan=${encodeURIComponent(plan)}`);
         }
       }
     } catch (err) {
