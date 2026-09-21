@@ -160,3 +160,21 @@ DROP POLICY IF EXISTS "verification_tokens_select_own" ON "verification_tokens";
 DROP POLICY IF EXISTS "verification_tokens_insert_own" ON "verification_tokens";
 DROP POLICY IF EXISTS "verification_tokens_update_own" ON "verification_tokens";
 DROP POLICY IF EXISTS "verification_tokens_delete_own" ON "verification_tokens";
+
+-- ------------------------------------------------------------------------------
+-- 7. DYNAMIC CHECK FOR OPTIONAL & PRISMA INTERNAL TABLES
+-- Enables RLS on internal/legacy tables if they exist in the public schema
+-- ------------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = '_prisma_migrations') THEN
+    EXECUTE 'ALTER TABLE "_prisma_migrations" ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pricing_operations') THEN
+    EXECUTE 'ALTER TABLE "pricing_operations" ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'password_reset_tokens') THEN
+    EXECUTE 'ALTER TABLE "password_reset_tokens" ENABLE ROW LEVEL SECURITY';
+  END IF;
+END $$;
+
