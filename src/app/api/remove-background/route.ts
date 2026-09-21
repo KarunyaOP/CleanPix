@@ -117,12 +117,13 @@ export async function POST(request: NextRequest) {
         framing = "balanced";
       }
 
-      // 5. Process Background Removal via CloudinaryService with selected Framing
+      // 5. Process Background Removal via CloudinaryService with selected Framing and user-scoped authenticated storage
       const result = await CloudinaryService.removeBackground(
         buffer,
         file.name,
         file.type || "image/png",
-        framing
+        framing,
+        dbUser?.id
       );
 
       // 6. Automatically save project to Supabase database for authenticated user

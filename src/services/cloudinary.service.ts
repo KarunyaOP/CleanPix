@@ -27,7 +27,8 @@ export class CloudinaryService {
     buffer: Buffer,
     fileName: string,
     mimeType: string,
-    framing: "fit" | "balanced" | "spacious" | string = "fit"
+    framing: "fit" | "balanced" | "spacious" | string = "fit",
+    userId?: string
   ): Promise<BackgroundRemovalResult> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -44,12 +45,15 @@ export class CloudinaryService {
     const cloudinary = getCloudinaryClient();
 
     try {
-      // 2. Upload raw image to Cloudinary with face and metadata detection enabled
+      // 2. Upload raw image to Cloudinary under authenticated delivery and user-scoped storage
+      const uploadFolder = userId ? `cleanpix/users/${userId}` : `cleanpix/guest/${jobId}`;
+
       const uploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: "cleanpix/uploads",
+            folder: uploadFolder,
             resource_type: "image",
+            type: "authenticated",
             faces: true,
             colors: true,
             image_metadata: true,
@@ -80,7 +84,7 @@ export class CloudinaryService {
       const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
       const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
 
-      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge and color space preservation
+      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge, color space preservation, and HMAC signature
       // Fit (0%): tight framing with fine edges
       // Balanced (50%): 25% extra canvas with b_transparent,c_pad
       // Spacious (100%): 50% extra canvas with b_transparent,c_pad
@@ -91,13 +95,15 @@ export class CloudinaryService {
         : "e_background_removal:fineedges_y/cs_srgb,q_100";
 
       const processedUrl = cloudinary.url(uploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
         raw_transformation: standardTransformation,
         format: "png",
         secure: true,
         version: uploadResult.version,
       });
 
-      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL:
+      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL with cryptographic HMAC signature:
       // Preserves original contrast and color vibrancy via cs_srgb + 2x DPR resolution + clean unsharp mask (e_unsharp_mask:120) + lossless 100% PNG quality
       const hdTransformation = isSpacious
         ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
@@ -106,14 +112,18 @@ export class CloudinaryService {
         : "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100";
 
       const hdUrl = cloudinary.url(uploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
         raw_transformation: hdTransformation,
         format: "png",
         secure: true,
         version: uploadResult.version,
       });
 
-      // 6. Construct raw original image URL for comparison slider (original background intact)
+      // 6. Construct signed original image URL with HMAC protection
       const originalUrl = cloudinary.url(uploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
         secure: true,
         version: uploadResult.version,
         format: uploadResult.format,
@@ -161,7 +171,7 @@ export class CloudinaryService {
   }
 
   /**
-   * Helper to generate HD URL dynamically from publicId & version
+   * Helper to generate HD URL dynamically from publicId & version with authenticated signature
    */
   static generateHdUrl(publicId: string, version?: number, framing: string = "fit"): string {
     const cloudinary = getCloudinaryClient();
@@ -174,6 +184,8 @@ export class CloudinaryService {
       : "e_background_removal:fineedges_y";
 
     return cloudinary.url(publicId, {
+      type: "authenticated",
+      sign_url: true,
       raw_transformation: `${padPrefix}/dpr_2.0,e_sharpen:100,e_improve,q_auto:best`,
       format: "png",
       secure: true,

@@ -437,23 +437,10 @@ export function useUpload() {
     setIsEnhancingHd(true);
     setHdError(null);
 
-    // Derive HD URL if not already set (Fine Edges + 2x DPR + Crisp Unsharp Mask + sRGB Color Space + Lossless 100% PNG)
-    let targetHdUrl = hdUrl;
-    if (!targetHdUrl && processedUrl) {
-      if (processedUrl.includes("e_background_removal:fineedges_y")) {
-        targetHdUrl = processedUrl.replace(
-          "e_background_removal:fineedges_y",
-          "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-        );
-      } else if (processedUrl.includes("e_background_removal")) {
-        targetHdUrl = processedUrl.replace(
-          "e_background_removal",
-          "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-        );
-      } else {
-        targetHdUrl = processedUrl;
-      }
-      setHdUrl(targetHdUrl);
+    // Use signed HD URL provided by server
+    let targetHdUrl = hdUrl || processedUrl;
+    if (!hdUrl && processedUrl) {
+      setHdUrl(processedUrl);
     }
 
     try {
@@ -521,15 +508,7 @@ export function useUpload() {
   const downloadCutout = useCallback(
     async (quality: "standard" | "hd" = "standard") => {
       const isHd = quality === "hd";
-      const targetUrl = isHd
-        ? hdUrl ||
-          (processedUrl
-            ? processedUrl.replace(
-                /e_background_removal(:fineedges_y)?/,
-                "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-              )
-            : null)
-        : processedUrl;
+      const targetUrl = isHd ? (hdUrl || processedUrl) : processedUrl;
       if (!targetUrl) return;
 
       const baseName = file ? file.name.replace(/\.[^/.]+$/, "") : "cleanpix";
