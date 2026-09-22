@@ -131,19 +131,22 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          const freshProjects: DashboardProject[] = data.projects;
-          const completedCount = freshProjects.filter(
-            (p) => p.status === "done" || Boolean(p.processedUrl)
-          ).length;
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json().catch(() => null);
+          if (data?.success && Array.isArray(data.projects)) {
+            const freshProjects: DashboardProject[] = data.projects;
+            const completedCount = freshProjects.filter(
+              (p) => p.status === "done" || Boolean(p.processedUrl)
+            ).length;
 
-          setRecentProjects(freshProjects.slice(0, 5));
-          setStats((prev) => ({
-            ...prev,
-            totalProjects: freshProjects.length,
-            totalProcessed: completedCount,
-          }));
+            setRecentProjects(freshProjects.slice(0, 5));
+            setStats((prev) => ({
+              ...prev,
+              totalProjects: freshProjects.length,
+              totalProcessed: completedCount,
+            }));
+          }
         }
       }
     } catch (err) {

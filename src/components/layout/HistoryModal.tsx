@@ -76,18 +76,21 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         });
 
         if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.projects)) {
-            const mapped: HistoryItem[] = data.projects.map((p: any) => ({
-              id: p.id,
-              originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-              cutoutUrl: p.processedUrl || p.originalUrl,
-              timestamp: new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-            }));
-            setHistoryItems(mapped);
-            if (isManualRefresh) showToast("History refreshed from database.");
-            return;
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const data = await res.json().catch(() => null);
+            if (data?.success && Array.isArray(data.projects)) {
+              const mapped: HistoryItem[] = data.projects.map((p: any) => ({
+                id: p.id,
+                originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
+                cutoutUrl: p.processedUrl || p.originalUrl,
+                timestamp: new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
+              }));
+              setHistoryItems(mapped);
+              if (isManualRefresh) showToast("History refreshed from database.");
+              return;
+            }
           }
         }
 

@@ -189,7 +189,15 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
         }),
       });
 
-      const orderData = await orderResponse.json();
+      let orderData: any = null;
+      const orderContentType = orderResponse.headers.get("content-type") || "";
+      if (orderContentType.includes("application/json")) {
+        try {
+          orderData = await orderResponse.json();
+        } catch {
+          orderData = null;
+        }
+      }
 
       if (!orderResponse.ok) {
         if (orderResponse.status === 401) {
@@ -200,7 +208,11 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
           window.location.href = `/login?redirect=pricing&plan=${planToCheckout}`;
           return;
         }
-        throw new Error(orderData.error || "Failed to initialize payment order.");
+        throw new Error(orderData?.error || "Failed to initialize payment order.");
+      }
+
+      if (!orderData) {
+        throw new Error("Invalid response received from server.");
       }
 
       const { orderId, amount, currency, keyId } = orderData;
@@ -263,10 +275,18 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
               }),
             });
 
-            const verifyData = await verifyRes.json();
+            let verifyData: any = null;
+            const verifyContentType = verifyRes.headers.get("content-type") || "";
+            if (verifyContentType.includes("application/json")) {
+              try {
+                verifyData = await verifyRes.json();
+              } catch {
+                verifyData = null;
+              }
+            }
 
-            if (!verifyRes.ok || !verifyData.success) {
-              throw new Error(verifyData.error || "Payment signature verification failed.");
+            if (!verifyRes.ok || !verifyData?.success) {
+              throw new Error(verifyData?.error || "Payment signature verification failed.");
             }
 
             // 5. Upgrade Success: Update Session & Disseminate Events

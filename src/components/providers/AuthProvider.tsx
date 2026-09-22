@@ -38,96 +38,115 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<CleanPixUser | null>(null);
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
+
+  // Deduping and Background Profile Sync Tracker
   const inFlightSyncRef = useRef<Promise<CleanPixUser | null> | null>(null);
+  const lastSyncTimestampRef = useRef<number>(0);
+  const lastSyncEmailRef = useRef<string | null>(null);
 
-  const syncUserProfile = useCallback(async (sbUser: SupabaseUser, token?: string): Promise<CleanPixUser | null> => {
-    if (!sbUser.email) return null;
-    if (inFlightSyncRef.current) {
-      return inFlightSyncRef.current;
-    }
+  const buildOptimisticUser = useCallback((sbUser: SupabaseUser): CleanPixUser => ({
+    id: sbUser.id,
+    email: sbUser.email!,
+    name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
+    image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
+    credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+    plan: sbUser.user_metadata?.plan || "free",
+    authProvider: sbUser.app_metadata?.provider || "email",
+  }), []);
 
-    const syncPromise = (async () => {
-      try {
-        const res = await fetch("/api/auth/profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            email: sbUser.email,
-            name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
-            image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
-          }),
-        });
+  const syncUserProfile = useCallback(
+    async (sbUser: SupabaseUser, token?: string, force = false): Promise<CleanPixUser | null> => {
+      if (!sbUser.email) return null;
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.user) {
-            const profileUser: CleanPixUser = {
-              id: data.user.id || sbUser.id,
-              email: data.user.email,
-              name: data.user.name || sbUser.user_metadata?.full_name || null,
-              image: data.user.image || sbUser.user_metadata?.avatar_url || null,
-              credits: typeof data.user.credits === "number" ? data.user.credits : 10,
-              plan: data.user.plan || "free",
-              authProvider: data.user.authProvider || "email",
-            };
-            setUser(profileUser);
-            return profileUser;
-          }
-        }
+      const emailNorm = sbUser.email.trim().toLowerCase();
+      const now = Date.now();
+      const isSameUser = lastSyncEmailRef.current === emailNorm;
+      const isRecentlySynced = now - lastSyncTimestampRef.current < 30000; // 30s TTL
 
-        // If backend fails, only fallback to metadata without fabricating false plan
-        const fallbackUser: CleanPixUser = {
-          id: sbUser.id,
-          email: sbUser.email!,
-          name: sbUser.user_metadata?.full_name || null,
-          image: sbUser.user_metadata?.avatar_url || null,
-          credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-          plan: sbUser.user_metadata?.plan || "free",
-          authProvider: "email",
-        };
-        setUser((prev) => prev || fallbackUser);
-        return fallbackUser;
-      } catch (err) {
-        console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
-        const fallbackUser: CleanPixUser = {
-          id: sbUser.id,
-          email: sbUser.email!,
-          name: sbUser.user_metadata?.full_name || null,
-          image: sbUser.user_metadata?.avatar_url || null,
-          credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-          plan: sbUser.user_metadata?.plan || "free",
-          authProvider: "email",
-        };
-        setUser((prev) => prev || fallbackUser);
-        return fallbackUser;
-      } finally {
-        inFlightSyncRef.current = null;
+      // Skip duplicate sync if already processed recently unless explicitly forced
+      if (!force && isSameUser && isRecentlySynced && !inFlightSyncRef.current) {
+        return user;
       }
-    })();
 
-    inFlightSyncRef.current = syncPromise;
-    return syncPromise;
-  }, []);
+      if (inFlightSyncRef.current) {
+        return inFlightSyncRef.current;
+      }
+
+      const syncPromise = (async () => {
+        try {
+          const res = await fetch("/api/auth/profile", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              email: sbUser.email,
+              name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
+              image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
+            }),
+          });
+
+          if (res.ok) {
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+              const data = await res.json().catch(() => null);
+              if (data?.user) {
+                const profileUser: CleanPixUser = {
+                  id: data.user.id || sbUser.id,
+                  email: data.user.email,
+                  name: data.user.name || sbUser.user_metadata?.full_name || null,
+                  image: data.user.image || sbUser.user_metadata?.avatar_url || null,
+                  credits: typeof data.user.credits === "number" ? data.user.credits : 10,
+                  plan: data.user.plan || "free",
+                  authProvider: data.user.authProvider || sbUser.app_metadata?.provider || "email",
+                };
+                lastSyncTimestampRef.current = Date.now();
+                lastSyncEmailRef.current = emailNorm;
+                setUser(profileUser);
+                return profileUser;
+              }
+            }
+          }
+
+          // Fallback to optimistic user without fabricating false plan
+          const fallbackUser = buildOptimisticUser(sbUser);
+          lastSyncTimestampRef.current = Date.now();
+          lastSyncEmailRef.current = emailNorm;
+          setUser((prev) => prev || fallbackUser);
+          return fallbackUser;
+        } catch (err) {
+          console.warn("[AUTH_SYNC_PROFILE_WARN]", err);
+          const fallbackUser = buildOptimisticUser(sbUser);
+          setUser((prev) => prev || fallbackUser);
+          return fallbackUser;
+        } finally {
+          inFlightSyncRef.current = null;
+        }
+      })();
+
+      inFlightSyncRef.current = syncPromise;
+      return syncPromise;
+    },
+    [user, buildOptimisticUser]
+  );
 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Check active session on mount
-    supabase.auth.getSession().then(async ({ data: { session: initialSession }, error }) => {
+    // 1. Restore active session instantaneously from local storage on mount (no blocking spinners)
+    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
       if (!isMounted) return;
       if (error) {
         console.error("[SUPABASE_GET_SESSION_ERROR]", error);
       }
       if (initialSession?.user) {
         setSession(initialSession);
-        // Hydrate real database profile BEFORE setting status to authenticated
-        await syncUserProfile(initialSession.user, initialSession.access_token);
-        if (isMounted) {
-          setStatus("authenticated");
-        }
+        setUser((prev) => prev || buildOptimisticUser(initialSession.user));
+        // Instantly mark status as authenticated so dashboard and pages load immediately (<50ms)
+        setStatus("authenticated");
+        // Reconcile database profile in background
+        syncUserProfile(initialSession.user, initialSession.access_token);
       } else {
         setSession(null);
         setUser(null);
@@ -135,14 +154,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // 2. Listen for Supabase Auth state changes (Magic Link callback, login, logout, token refresh)
+    // 2. Listen for Supabase Auth state changes (Magic Link callback, Google Login, logout, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((event, currentSession) => {
       console.log(`[SUPABASE_AUTH_EVENT] ${event}`, { email: currentSession?.user?.email });
       if (!isMounted) return;
 
       if (event === "SIGNED_OUT" || !currentSession?.user) {
+        lastSyncEmailRef.current = null;
+        lastSyncTimestampRef.current = 0;
         setSession(null);
         setUser(null);
         setStatus("unauthenticated");
@@ -151,9 +172,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (currentSession?.user) {
         setSession(currentSession);
-        await syncUserProfile(currentSession.user, currentSession.access_token);
-        if (isMounted) {
-          setStatus("authenticated");
+        setUser((prev) => prev || buildOptimisticUser(currentSession.user));
+        setStatus("authenticated");
+
+        // Avoid duplicate sync if event is INITIAL_SESSION and already processed by getSession()
+        const isInitial = event === "INITIAL_SESSION";
+        const isExplicitAuthChange =
+          event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED";
+
+        if (isExplicitAuthChange || (!isInitial && !lastSyncTimestampRef.current)) {
+          syncUserProfile(currentSession.user, currentSession.access_token, isExplicitAuthChange);
         }
       }
     });
@@ -179,7 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
     };
-  }, [syncUserProfile]);
+  }, [syncUserProfile, buildOptimisticUser]);
 
   const signInWithOtp = async (email: string, callbackPath?: string) => {
     const emailRedirectTo = getRedirectUrl(callbackPath);
@@ -205,6 +233,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async (options?: { callbackUrl?: string }) => {
     try {
       console.log("[SUPABASE_SIGNOUT_START]");
+      lastSyncEmailRef.current = null;
+      lastSyncTimestampRef.current = 0;
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);
@@ -225,7 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newData?.plan !== undefined) {
         setUser((prev) => (prev ? { ...prev, plan: newData.plan } : null));
       }
-      await syncUserProfile(session.user, session.access_token);
+      await syncUserProfile(session.user, session.access_token, true);
     }
   };
 

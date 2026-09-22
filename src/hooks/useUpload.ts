@@ -2,7 +2,13 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useSession } from "@/components/providers/AuthProvider";
-import { validateImageFile, getImageDimensions } from "@/utils/fileValidation";
+import {
+  validateImageFile,
+  validateImageResolution,
+  getImageDimensions,
+  optimizeImageForUpload,
+  MAX_FILE_SIZE_BYTES,
+} from "@/utils/fileValidation";
 import { classifyImageSubject } from "@/utils/aiDetection";
 import { ApiErrorResponse, DetectedCategory } from "@/types/schema";
 
@@ -158,24 +164,44 @@ export function useUpload() {
   }, [previewUrl]);
 
   const selectFile = useCallback(
-    (selectedFile: File) => {
+    async (selectedFile: File) => {
       clearError();
 
-      // 1. Client-Side Validation
-      const validation = validateImageFile(selectedFile);
+      // 1. Check basic file integrity & MIME type
+      const initialValidation = validateImageFile(selectedFile);
+      if (
+        !initialValidation.valid &&
+        (initialValidation.error?.code === "INVALID_FILE_TYPE" ||
+          initialValidation.error?.code === "EMPTY_FILE")
+      ) {
+        setError(initialValidation.error);
+        return;
+      }
+
+      // 2. Smart Client-Side Downscaling (if file is oversized >4MB or >20 Megapixels)
+      let activeFile = selectedFile;
+      try {
+        activeFile = await optimizeImageForUpload(selectedFile);
+      } catch (optErr) {
+        console.warn("[IMAGE_OPTIMIZATION_WARN]", optErr);
+        activeFile = selectedFile;
+      }
+
+      // 3. Final Client-Side File Size & Type Validation
+      const validation = validateImageFile(activeFile);
       if (!validation.valid && validation.error) {
         setError(validation.error);
         return;
       }
 
-      // 2. Set file and create instant client-side preview URL
+      // 4. Set file and create instant client-side preview URL
       if (previewUrl && previewUrl.startsWith("blob:")) {
         URL.revokeObjectURL(previewUrl);
       }
-      setFile(selectedFile);
-      const initialSubject = classifyImageSubject({ fileName: selectedFile.name });
+      setFile(activeFile);
+      const initialSubject = classifyImageSubject({ fileName: activeFile.name });
       setDetectedObject(initialSubject);
-      const localUrl = URL.createObjectURL(selectedFile);
+      const localUrl = URL.createObjectURL(activeFile);
       setPreviewUrl(localUrl);
       setProcessedUrl(null);
       setHdUrl(null);
@@ -186,11 +212,16 @@ export function useUpload() {
       setIsProcessingAI(false);
       setUploadProgress(0);
 
-      // Read dimensions asynchronously and refine classification with geometry heuristics
-      getImageDimensions(selectedFile).then((dims) => {
+      // 5. Read dimensions asynchronously, validate 20MP ceiling, and refine classification
+      getImageDimensions(activeFile).then((dims) => {
         setDimensions(dims);
+        const resValidation = validateImageResolution(dims.width, dims.height);
+        if (!resValidation.valid && resValidation.error) {
+          setError(resValidation.error);
+          return;
+        }
         const refinedSubject = classifyImageSubject({
-          fileName: selectedFile.name,
+          fileName: activeFile.name,
           width: dims.width,
           height: dims.height,
         });
@@ -262,9 +293,24 @@ export function useUpload() {
     setIsHdReady(false);
 
     try {
-      // 1. Prepare FormData with exact uploaded file and selected framing
+      // 1. Ensure file is within strict 4MB limit before uploading
+      let uploadFile = file;
+      if (uploadFile.size > MAX_FILE_SIZE_BYTES) {
+        uploadFile = await optimizeImageForUpload(file);
+      }
+
+      const finalValidation = validateImageFile(uploadFile);
+      if (!finalValidation.valid && finalValidation.error) {
+        throw {
+          code: finalValidation.error.code,
+          message: finalValidation.error.message,
+          details: finalValidation.error.details,
+        };
+      }
+
+      // 2. Prepare FormData with exact uploaded file and selected framing
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
       formData.append("framing", framingStr);
       formData.append(
         "paddingPercent",
@@ -287,7 +333,7 @@ export function useUpload() {
 
       setUploadProgress(50);
 
-      // 2. Send to /api/remove-background for Cloudinary AI processing
+      // 3. Send to /api/remove-background for Cloudinary AI processing
       const response = await fetch("/api/remove-background", {
         method: "POST",
         headers: {
@@ -299,14 +345,47 @@ export function useUpload() {
 
       setUploadProgress(75);
 
-      const data: BackgroundRemovalResponse | ApiErrorResponse = await response.json();
+      // Safe JSON Parsing: Never call response.json() without checking response.ok and content-type
+      let data: any = null;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+        } catch (jsonErr) {
+          console.warn("[BACKGROUND_REMOVAL_JSON_PARSE_WARN]", jsonErr);
+          data = null;
+        }
+      } else {
+        const rawText = await response.text().catch(() => "");
+        data = { message: rawText };
+      }
 
-      if (!response.ok || "error" in data) {
-        const errData = data as ApiErrorResponse;
+      if (!response.ok || (data && "error" in data)) {
+        let errCode = data?.error?.code || "AI_PROCESSING_FAILED";
+        let errMsg = data?.error?.message;
+        const errDetails = data?.error?.details || data?.message;
+
+        if (response.status === 413) {
+          errCode = "FILE_TOO_LARGE";
+          errMsg = errMsg || "Image exceeds maximum upload size (4MB).";
+        } else if (response.status === 400) {
+          errCode = data?.error?.code || "INVALID_REQUEST";
+          errMsg = errMsg || "Invalid image request or unsupported file format.";
+        } else if (response.status === 401) {
+          errCode = "UNAUTHORIZED";
+          errMsg = "You must be signed in to perform this action.";
+        } else if (response.status === 403) {
+          errCode = data?.error?.code || "INSUFFICIENT_CREDITS";
+          errMsg = errMsg || "You have 0 credits remaining. Please upgrade your plan to continue.";
+        } else if (response.status >= 500) {
+          errCode = "SERVER_ERROR";
+          errMsg = errMsg || "Image processing service is temporarily unavailable. Please try again in a moment.";
+        }
+
         throw {
-          code: errData.error?.code || "AI_PROCESSING_FAILED",
-          message: errData.error?.message || "Failed to remove background from image.",
-          details: errData.error?.details,
+          code: errCode,
+          message: errMsg || "Failed to remove background from image.",
+          details: errDetails,
         };
       }
 
@@ -318,13 +397,13 @@ export function useUpload() {
       }
       setUploadProgress(90);
 
-      // 3. Preload genuine Cloudinary background-removed URL to ensure transparent PNG is ready
+      // 4. Preload genuine Cloudinary background-removed URL to ensure transparent PNG is ready
       await preloadProcessedImage(successData.processedUrl);
 
       setProcessedUrl(successData.processedUrl);
       setUploadProgress(100);
 
-      // 4. Update credits in real-time across Navbar, Dashboard, and Settings
+      // 5. Update credits in real-time across Navbar, Dashboard, and Settings
       if (typeof successData.creditsRemaining === "number") {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -340,7 +419,7 @@ export function useUpload() {
         }
       }
 
-      // 5. Save to database for authenticated user and guarantee persistence
+      // 6. Save to database for authenticated user and guarantee persistence
       let verifiedProjectId = (successData as any).projectId || successData.jobId || `proj-${Date.now()}`;
       if (session?.user?.email) {
         try {
@@ -354,15 +433,18 @@ export function useUpload() {
             body: JSON.stringify({
               userId: session.user.id,
               userEmail: session.user.email,
-              originalUrl: successData.originalUrl || file.name,
+              originalUrl: successData.originalUrl || uploadFile.name,
               processedUrl: successData.processedUrl,
               detectedObject: successData.detectedObject || "other",
             }),
           });
           if (saveRes.ok) {
-            const saveJson = await saveRes.json();
-            if (saveJson.project?.id) {
-              verifiedProjectId = saveJson.project.id;
+            const saveContentType = saveRes.headers.get("content-type") || "";
+            if (saveContentType.includes("application/json")) {
+              const saveJson = await saveRes.json().catch(() => null);
+              if (saveJson?.project?.id) {
+                verifiedProjectId = saveJson.project.id;
+              }
             }
           }
         } catch (dbErr) {
@@ -370,10 +452,10 @@ export function useUpload() {
         }
       }
 
-      // 6. Notify real-time listeners across Dashboard & History
+      // 7. Notify real-time listeners across Dashboard & History
       const newCutout = {
         id: verifiedProjectId,
-        originalUrl: successData.originalUrl || file.name,
+        originalUrl: successData.originalUrl || uploadFile.name,
         processedUrl: successData.processedUrl,
         detectedObject: successData.detectedObject || "other",
         status: "done",
@@ -416,7 +498,7 @@ export function useUpload() {
       setError({
         code: err.code || "AI_PROCESSING_FAILED",
         message: err.message || "An unexpected error occurred during background removal.",
-        details: err.details || "Please verify your Cloudinary credentials or try again.",
+        details: err.details || "Please verify your image or try again.",
       });
     } finally {
       setIsUploading(false);

@@ -31,7 +31,10 @@ export async function POST(request: NextRequest) {
           authProvider: "email",
         },
       });
-    } else if (body.name || body.image) {
+    } else if (
+      (body.name && body.name !== user.name) ||
+      (body.image && body.image !== user.image)
+    ) {
       user = await prisma.user.update({
         where: { email },
         data: {

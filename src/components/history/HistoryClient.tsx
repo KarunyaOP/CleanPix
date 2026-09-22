@@ -114,9 +114,12 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          setProjects(data.projects);
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json().catch(() => null);
+          if (data?.success && Array.isArray(data.projects)) {
+            setProjects(data.projects);
+          }
         }
       }
     } catch (err) {
@@ -150,11 +153,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.projects)) {
-          setProjects(data.projects);
-          showToast("History refreshed from database.");
-          return;
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json().catch(() => null);
+          if (data?.success && Array.isArray(data.projects)) {
+            setProjects(data.projects);
+            showToast("History refreshed from database.");
+            return;
+          }
         }
       }
 
