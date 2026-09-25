@@ -6,8 +6,8 @@ export const ALLOWED_MIME_TYPES = [
   "image/webp",
 ];
 
-export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB direct to Cloudinary
-export const MAX_FILE_SIZE_MB = 20;
+export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB (Cloudinary AI Background Removal engine limit)
+export const MAX_FILE_SIZE_MB = 10;
 export const MAX_IMAGE_MEGAPIXELS = 25; // 25 Megapixels (Cloudinary AI ceiling)
 
 export interface FileValidationResult {
@@ -33,7 +33,7 @@ export function validateImageFile(file: File): FileValidationResult {
     };
   }
 
-  // 1. File Size Validation (<= 20MB)
+  // 1. File Size Validation (<= 10MB)
   if (file.size > MAX_FILE_SIZE_BYTES) {
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
     return {
@@ -119,7 +119,8 @@ export async function getImageDimensions(file: File): Promise<{ width: number; h
 /**
  * Smart Client-Side Optimization:
  * Automatically downscales oversized or ultra-high-resolution images before upload.
- * Preserves exact aspect ratio and color sharpness, ensuring result is <=20MB and <=25 Megapixels.
+ * Preserves exact aspect ratio and razor-sharp clarity, ensuring result is <=10MB (10,485,760 bytes)
+ * and satisfies Cloudinary AI Background Removal engine limits.
  */
 export async function optimizeImageForUpload(file: File): Promise<File> {
   // If not in browser environment or file is empty, return original
@@ -131,10 +132,11 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
   const dims = await getImageDimensions(file);
   const totalPixels = dims.width * dims.height;
   const megapixels = totalPixels / 1_000_000;
+  const maxDim = Math.max(dims.width, dims.height);
   const isOverSize = file.size > MAX_FILE_SIZE_BYTES;
-  const isOverRes = megapixels > MAX_IMAGE_MEGAPIXELS;
+  const isOverRes = megapixels > 16.0 || maxDim > 2500;
 
-  // If already within 20MB and 25MP limits, preserve 100% original binary bytes
+  // If already within 10MB and safe resolution limits, preserve 100% original binary bytes
   if (!isOverSize && !isOverRes && dims.width > 0) {
     return file;
   }
@@ -153,22 +155,24 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
         return resolve(file);
       }
 
-      // Calculate target scaling factor to strictly satisfy <= 25MP (target ~22MP max) and max dimension <= 5000px
+      // Calculate target scaling factor to strictly satisfy <= 2048px max dimension and <= 10MB
       let scale = 1.0;
+      const curMax = Math.max(srcWidth, srcHeight);
+      if (curMax > 2048) {
+        scale = Math.min(scale, 2048 / curMax);
+      }
+
       const curMP = (srcWidth * srcHeight) / 1_000_000;
-      if (curMP > 24.0) {
-        scale = Math.min(scale, Math.sqrt(22.0 / curMP));
+      if (curMP * scale * scale > 12.0) {
+        scale = Math.min(scale, Math.sqrt(12.0 / curMP));
       }
 
-      const maxDim = Math.max(srcWidth, srcHeight);
-      if (maxDim * scale > 5000) {
-        scale = Math.min(scale, 5000 / maxDim);
-      }
-
-      // Additional downscale step if file byte size is heavily bloated over 20MB
-      if (file.size > 30 * 1024 * 1024) {
-        scale = Math.min(scale, 0.75);
-      } else if (file.size > 20 * 1024 * 1024) {
+      // Additional downscale step if file byte size is heavily bloated over 10MB
+      if (file.size > 25 * 1024 * 1024) {
+        scale = Math.min(scale, 0.70);
+      } else if (file.size > 15 * 1024 * 1024) {
+        scale = Math.min(scale, 0.80);
+      } else if (file.size > MAX_FILE_SIZE_BYTES) {
         scale = Math.min(scale, 0.90);
       }
 
@@ -203,7 +207,7 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
               return resolve(optimizedFile);
             }
 
-            // If PNG is still >20MB, export as high-quality JPEG (0.95)
+            // If PNG is still >10MB, export as high-quality JPEG (0.95)
             canvas.toBlob(
               (jpgBlob) => {
                 if (jpgBlob) {
@@ -225,14 +229,28 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
       } else if (isWebp) {
         canvas.toBlob(
           (blob) => {
-            if (blob) {
+            if (blob && blob.size <= MAX_FILE_SIZE_BYTES) {
               const optimizedFile = new File([blob], file.name, {
                 type: "image/webp",
                 lastModified: Date.now(),
               });
               return resolve(optimizedFile);
             }
-            return resolve(file);
+            // If WEBP is still >10MB, export at 0.92 quality
+            canvas.toBlob(
+              (lowerBlob) => {
+                if (lowerBlob) {
+                  const optimizedFile = new File([lowerBlob], file.name, {
+                    type: "image/webp",
+                    lastModified: Date.now(),
+                  });
+                  return resolve(optimizedFile);
+                }
+                return resolve(file);
+              },
+              "image/webp",
+              0.92
+            );
           },
           "image/webp",
           0.95
@@ -241,14 +259,28 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
         // Default: High-Quality JPEG (0.95 quality maintains crisp edges and zero perceptible artifacts)
         canvas.toBlob(
           (blob) => {
-            if (blob) {
+            if (blob && blob.size <= MAX_FILE_SIZE_BYTES) {
               const optimizedFile = new File([blob], file.name, {
                 type: "image/jpeg",
                 lastModified: Date.now(),
               });
               return resolve(optimizedFile);
             }
-            return resolve(file);
+            // Fallback for extreme cases: 0.90 quality
+            canvas.toBlob(
+              (lowerBlob) => {
+                if (lowerBlob) {
+                  const optimizedFile = new File([lowerBlob], file.name, {
+                    type: "image/jpeg",
+                    lastModified: Date.now(),
+                  });
+                  return resolve(optimizedFile);
+                }
+                return resolve(file);
+              },
+              "image/jpeg",
+              0.90
+            );
           },
           "image/jpeg",
           0.95

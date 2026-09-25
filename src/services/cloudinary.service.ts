@@ -154,11 +154,12 @@ export class CloudinaryService {
       const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
 
       // 2. Construct genuine Standard Cloudinary AI Background Removal transformed URL with HMAC signature
+      // c_limit,w_2048,h_2048 guarantees the transparent PNG buffer never exceeds Cloudinary's 10MB (10,485,760 bytes) processing limit
       const standardTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_100"
+        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_auto:best"
         : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_100"
-        : "e_background_removal:fineedges_y/cs_srgb,q_100";
+        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_auto:best"
+        : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/cs_srgb,q_auto:best";
 
       const processedUrl = cloudinary.url(publicId, {
         type: "authenticated",
@@ -171,10 +172,10 @@ export class CloudinaryService {
 
       // 3. Construct HD Enhanced Cloudinary AI Background Removal transformed URL with HMAC signature
       const hdTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
+        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/e_unsharp_mask:120,cs_srgb,q_auto:best"
         : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-        : "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100";
+        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/e_unsharp_mask:120,cs_srgb,q_auto:best"
+        : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/e_unsharp_mask:120,cs_srgb,q_auto:best";
 
       const hdUrl = cloudinary.url(publicId, {
         type: "authenticated",
@@ -313,15 +314,15 @@ export class CloudinaryService {
     const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
     const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
     const padPrefix = isSpacious
-      ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
+      ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
       : isBalanced
-      ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
-      : "e_background_removal:fineedges_y";
+      ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
+      : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y";
 
     return cloudinary.url(publicId, {
       type: "authenticated",
       sign_url: true,
-      raw_transformation: `${padPrefix}/dpr_2.0,e_sharpen:100,e_improve,q_auto:best`,
+      raw_transformation: `${padPrefix}/e_unsharp_mask:120,cs_srgb,q_auto:best`,
       format: "png",
       secure: true,
       version: version,
@@ -353,18 +354,34 @@ export class CloudinaryService {
         }
         if (response.status === 400) {
           const detailRes = await fetch(url, { cache: "no-store" });
+          const cldErrorHeader = detailRes.headers.get("x-cld-error") || "";
           const text = await detailRes.text();
-          if (text.toLowerCase().includes("background_removal")) {
+          if (
+            cldErrorHeader.toLowerCase().includes("file size too large") ||
+            text.toLowerCase().includes("file size too large") ||
+            cldErrorHeader.includes("10485760")
+          ) {
+            const err: any = new Error(
+              "The image file or output resolution exceeds Cloudinary's 10 MB transformation processing limit. Please try an optimized version of the image."
+            );
+            err.code = "CLOUDINARY_FILE_SIZE_LIMIT";
+            err.details = cldErrorHeader || text;
+            throw err;
+          }
+          if (
+            text.toLowerCase().includes("background_removal") ||
+            cldErrorHeader.toLowerCase().includes("background_removal")
+          ) {
             const err: any = new Error(
               "Cloudinary AI Background Removal failed. Please ensure the Cloudinary AI Background Removal add-on is enabled on your Cloudinary account."
             );
             err.code = "CLOUDINARY_ADDON_ERROR";
-            err.details = text;
+            err.details = cldErrorHeader || text;
             throw err;
           }
         }
       } catch (err: any) {
-        if (err.code === "CLOUDINARY_ADDON_ERROR") throw err;
+        if (err.code === "CLOUDINARY_ADDON_ERROR" || err.code === "CLOUDINARY_FILE_SIZE_LIMIT") throw err;
       }
     }
   }
