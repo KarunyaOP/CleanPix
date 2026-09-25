@@ -330,27 +330,35 @@ export class CloudinaryService {
   }
 
   /**
-   * Fast polling on server to check if Cloudinary has finished the AI transformation
+   * Ultra-low latency server check to verify AI transformation status and detect 400 errors immediately
    */
   private static async verifyOrPollCloudinaryUrl(
     url: string,
-    maxAttempts = 12,
-    initialIntervalMs = 350
+    maxAttempts = 3,
+    initialIntervalMs = 150
   ): Promise<void> {
     let currentInterval = initialIntervalMs;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await fetch(url, { method: "HEAD", cache: "no-store" });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 600);
+
+        const response = await fetch(url, {
+          method: "HEAD",
+          cache: "no-store",
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
+
         if (response.status === 200) {
           return; // Ready!
         }
         if (response.status === 423 || response.status === 420 || response.status === 404) {
-          // Cloudinary is processing AI model asynchronously
-          if (attempt < maxAttempts) {
+          // Cloudinary is processing AI model asynchronously - return early so client decodes progressively
+          if (attempt === 1) {
             await new Promise((resolve) => setTimeout(resolve, currentInterval));
-            currentInterval = Math.min(currentInterval * 1.25, 1200);
             continue;
           }
+          return;
         }
         if (response.status === 400) {
           const detailRes = await fetch(url, { cache: "no-store" });
@@ -382,6 +390,8 @@ export class CloudinaryService {
         }
       } catch (err: any) {
         if (err.code === "CLOUDINARY_ADDON_ERROR" || err.code === "CLOUDINARY_FILE_SIZE_LIMIT") throw err;
+        // Non-blocking network timeout: allow client to decode progressively
+        return;
       }
     }
   }

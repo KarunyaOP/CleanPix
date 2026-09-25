@@ -119,42 +119,40 @@ export async function POST(request: NextRequest) {
           userId: dbUser?.id,
         });
 
-        // Automatically save project to Supabase/PostgreSQL database for authenticated user
+        // Concurrently save project to database and query updated credits
         let savedProject: any = null;
-        if (dbUser) {
-          try {
-            const validObjects = ["person", "product", "pet", "vehicle", "other"];
-            const category = validObjects.includes(result.detectedObject)
-              ? result.detectedObject
-              : "other";
-
-            savedProject = await prisma.project.create({
-              data: {
-                userId: dbUser.id,
-                originalUrl: result.originalUrl || fileName || publicId,
-                processedUrl: result.processedUrl,
-                detectedObject: category as any,
-                status: "done",
-              },
-              include: { exports: true },
-            });
-          } catch (dbSaveErr) {
-            console.error("[REMOVE_BG_DIRECT_AUTO_SAVE_ERROR]", dbSaveErr);
-          }
-        }
-
-        // Query remaining credits
         let remainingCredits: number | undefined = undefined;
+
         if (dbUser) {
-          if (isUnlimited) {
-            remainingCredits = 999999;
-          } else {
-            const freshUser = await prisma.user.findUnique({
-              where: { id: dbUser.id },
-              select: { credits: true },
-            });
-            remainingCredits = Math.max(0, freshUser?.credits ?? 0);
-          }
+          const validObjects = ["person", "product", "pet", "vehicle", "other"];
+          const category = validObjects.includes(result.detectedObject)
+            ? result.detectedObject
+            : "other";
+
+          const projectSavePromise = prisma.project.create({
+            data: {
+              userId: dbUser.id,
+              originalUrl: result.originalUrl || fileName || publicId,
+              processedUrl: result.processedUrl,
+              detectedObject: category as any,
+              status: "done",
+            },
+            include: { exports: true },
+          }).catch((dbSaveErr) => {
+            console.error("[REMOVE_BG_DIRECT_AUTO_SAVE_ERROR]", dbSaveErr);
+            return null;
+          });
+
+          const creditQueryPromise = isUnlimited
+            ? Promise.resolve({ credits: 999999 })
+            : prisma.user.findUnique({
+                where: { id: dbUser.id },
+                select: { credits: true },
+              });
+
+          const [saved, freshUser] = await Promise.all([projectSavePromise, creditQueryPromise]);
+          savedProject = saved;
+          remainingCredits = isUnlimited ? 999999 : Math.max(0, freshUser?.credits ?? 0);
         }
 
         return NextResponse.json(
@@ -302,42 +300,40 @@ export async function POST(request: NextRequest) {
         dbUser?.id
       );
 
-      // 6. Automatically save project to Supabase database for authenticated user
+      // 6. Concurrently save project to database and query updated credits
       let savedProject: any = null;
-      if (dbUser) {
-        try {
-          const validObjects = ["person", "product", "pet", "vehicle", "other"];
-          const category = validObjects.includes(result.detectedObject)
-            ? result.detectedObject
-            : "other";
-
-          savedProject = await prisma.project.create({
-            data: {
-              userId: dbUser.id,
-              originalUrl: result.originalUrl || file.name,
-              processedUrl: result.processedUrl,
-              detectedObject: category as any,
-              status: "done",
-            },
-            include: { exports: true },
-          });
-        } catch (dbSaveErr) {
-          console.error("[REMOVE_BG_AUTO_SAVE_ERROR]", dbSaveErr);
-        }
-      }
-
-      // 7. Query updated credit balance
       let remainingCredits: number | undefined = undefined;
+
       if (dbUser) {
-        if (isUnlimited) {
-          remainingCredits = 999999;
-        } else {
-          const freshUser = await prisma.user.findUnique({
-            where: { id: dbUser.id },
-            select: { credits: true },
-          });
-          remainingCredits = Math.max(0, freshUser?.credits ?? 0);
-        }
+        const validObjects = ["person", "product", "pet", "vehicle", "other"];
+        const category = validObjects.includes(result.detectedObject)
+          ? result.detectedObject
+          : "other";
+
+        const projectSavePromise = prisma.project.create({
+          data: {
+            userId: dbUser.id,
+            originalUrl: result.originalUrl || file.name,
+            processedUrl: result.processedUrl,
+            detectedObject: category as any,
+            status: "done",
+          },
+          include: { exports: true },
+        }).catch((dbSaveErr) => {
+          console.error("[REMOVE_BG_AUTO_SAVE_ERROR]", dbSaveErr);
+          return null;
+        });
+
+        const creditQueryPromise = isUnlimited
+          ? Promise.resolve({ credits: 999999 })
+          : prisma.user.findUnique({
+              where: { id: dbUser.id },
+              select: { credits: true },
+            });
+
+        const [saved, freshUser] = await Promise.all([projectSavePromise, creditQueryPromise]);
+        savedProject = saved;
+        remainingCredits = isUnlimited ? 999999 : Math.max(0, freshUser?.credits ?? 0);
       }
 
       return NextResponse.json(

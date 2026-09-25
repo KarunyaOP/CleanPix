@@ -39,20 +39,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<CleanPixUser | null>(null);
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
 
+  // Persistent User Profile Cache Helpers
+  const getCachedProfile = (emailOrId: string): CleanPixUser | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(`cleanpix_user_profile_${emailOrId.trim().toLowerCase()}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.email) return parsed;
+      }
+    } catch {}
+    return null;
+  };
+
+  const setCachedProfile = (profileUser: CleanPixUser) => {
+    if (typeof window === "undefined" || !profileUser.email) return;
+    try {
+      const key = `cleanpix_user_profile_${profileUser.email.trim().toLowerCase()}`;
+      localStorage.setItem(key, JSON.stringify(profileUser));
+      if (profileUser.id) {
+        localStorage.setItem(`cleanpix_user_profile_${profileUser.id}`, JSON.stringify(profileUser));
+      }
+    } catch {}
+  };
+
+  const clearCachedProfile = (emailOrId?: string | null) => {
+    if (typeof window === "undefined") return;
+    try {
+      if (emailOrId) {
+        localStorage.removeItem(`cleanpix_user_profile_${emailOrId.trim().toLowerCase()}`);
+      }
+      // Remove all cleanpix user profile keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("cleanpix_user_profile_")) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {}
+  };
+
   // Deduping and Background Profile Sync Tracker
   const inFlightSyncRef = useRef<Promise<CleanPixUser | null> | null>(null);
   const lastSyncTimestampRef = useRef<number>(0);
   const lastSyncEmailRef = useRef<string | null>(null);
 
-  const buildOptimisticUser = useCallback((sbUser: SupabaseUser): CleanPixUser => ({
-    id: sbUser.id,
-    email: sbUser.email!,
-    name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
-    image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
-    credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-    plan: sbUser.user_metadata?.plan || "free",
-    authProvider: sbUser.app_metadata?.provider || "email",
-  }), []);
+  const buildOptimisticUser = useCallback((sbUser: SupabaseUser): CleanPixUser => {
+    // 1. Check if we have a cached profile with accurate plan and credits
+    const cached = getCachedProfile(sbUser.email || sbUser.id);
+    if (cached) {
+      return {
+        ...cached,
+        id: sbUser.id,
+        email: sbUser.email || cached.email,
+        name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || cached.name || null,
+        image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || cached.image || null,
+      };
+    }
+
+    return {
+      id: sbUser.id,
+      email: sbUser.email!,
+      name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
+      image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
+      credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
+      plan: sbUser.user_metadata?.plan || "free",
+      authProvider: sbUser.app_metadata?.provider || "email",
+    };
+  }, []);
 
   const syncUserProfile = useCallback(
     async (sbUser: SupabaseUser, token?: string, force = false): Promise<CleanPixUser | null> => {
@@ -103,6 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
                 lastSyncTimestampRef.current = Date.now();
                 lastSyncEmailRef.current = emailNorm;
+                setCachedProfile(profileUser);
                 setUser(profileUser);
                 return profileUser;
               }
@@ -113,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const fallbackUser = buildOptimisticUser(sbUser);
           lastSyncTimestampRef.current = Date.now();
           lastSyncEmailRef.current = emailNorm;
+          setCachedProfile(fallbackUser);
           setUser((prev) => prev || fallbackUser);
           return fallbackUser;
         } catch (err) {
@@ -142,7 +198,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (initialSession?.user) {
         setSession(initialSession);
-        setUser((prev) => prev || buildOptimisticUser(initialSession.user));
+        const hydratedUser = buildOptimisticUser(initialSession.user);
+        setUser(hydratedUser);
         // Instantly mark status as authenticated so dashboard and pages load immediately (<50ms)
         setStatus("authenticated");
         // Reconcile database profile in background
@@ -164,6 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (event === "SIGNED_OUT" || !currentSession?.user) {
         lastSyncEmailRef.current = null;
         lastSyncTimestampRef.current = 0;
+        clearCachedProfile();
         setSession(null);
         setUser(null);
         setStatus("unauthenticated");
@@ -172,7 +230,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (currentSession?.user) {
         setSession(currentSession);
-        setUser((prev) => prev || buildOptimisticUser(currentSession.user));
+        const hydratedUser = buildOptimisticUser(currentSession.user);
+        setUser(hydratedUser);
         setStatus("authenticated");
 
         // Avoid duplicate sync if event is INITIAL_SESSION and already processed by getSession()
@@ -189,12 +248,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 3. Listen to local credit and plan updates dispatched within the app
     const handleCreditsUpdated = (e: any) => {
       if (typeof e.detail?.credits === "number") {
-        setUser((prev) => (prev ? { ...prev, credits: e.detail.credits } : null));
+        setUser((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev, credits: e.detail.credits };
+          setCachedProfile(updated);
+          return updated;
+        });
       }
     };
     const handlePlanUpdated = (e: any) => {
       if (e.detail?.plan) {
-        setUser((prev) => (prev ? { ...prev, plan: e.detail.plan } : null));
+        setUser((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev, plan: e.detail.plan };
+          setCachedProfile(updated);
+          return updated;
+        });
       }
     };
 
@@ -235,6 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("[SUPABASE_SIGNOUT_START]");
       lastSyncEmailRef.current = null;
       lastSyncTimestampRef.current = 0;
+      clearCachedProfile(user?.email || user?.id);
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);
@@ -250,10 +320,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const update = async (newData?: any) => {
     if (session?.user) {
       if (newData?.credits !== undefined) {
-        setUser((prev) => (prev ? { ...prev, credits: newData.credits } : null));
+        setUser((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev, credits: newData.credits };
+          setCachedProfile(updated);
+          return updated;
+        });
       }
       if (newData?.plan !== undefined) {
-        setUser((prev) => (prev ? { ...prev, plan: newData.plan } : null));
+        setUser((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev, plan: newData.plan };
+          setCachedProfile(updated);
+          return updated;
+        });
       }
       await syncUserProfile(session.user, session.access_token, true);
     }

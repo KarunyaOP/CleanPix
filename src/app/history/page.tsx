@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/providers/AuthProvider";
 import { HistoryClient, ProjectRecord } from "@/components/history/HistoryClient";
+import { getCachedProjects } from "@/utils/projectCache";
 import { Loader2 } from "lucide-react";
 
 export default function HistoryPage() {
@@ -30,10 +31,12 @@ export default function HistoryPage() {
   }
 
   const user = session.user as any;
+  const userKey = user.id || user.email || "guest";
+  const cached = getCachedProjects(userKey);
 
   return (
     <HistoryClient
-      initialProjects={[]}
+      initialProjects={cached.projects}
       initialUser={{
         name: user.name,
         email: user.email,

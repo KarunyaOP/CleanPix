@@ -33,27 +33,29 @@ export interface ToastState {
   duration?: number;
 }
 
+import { optimisticallyAddProject } from "@/utils/projectCache";
+
 /**
  * Preloads the transformed Cloudinary URL using standard Image element decoding
  * to guarantee instantaneous, flicker-free rendering when revealing the cutout.
  */
 const preloadProcessedImage = (
   url: string,
-  maxAttempts = 15,
-  initialIntervalMs = 200
+  maxAttempts = 12,
+  initialIntervalMs = 100
 ): Promise<string> => {
   return new Promise((resolve) => {
     let attempts = 0;
     let currentInterval = initialIntervalMs;
     let isResolved = false;
 
-    // Safety timeout: Never hang processing UI indefinitely
+    // Safety timeout: Reveal within 4s maximum
     const safetyTimeout = setTimeout(() => {
       if (!isResolved) {
         isResolved = true;
         resolve(url);
       }
-    }, 12000);
+    }, 4500);
 
     const tryLoad = () => {
       if (isResolved) return;
@@ -65,7 +67,8 @@ const preloadProcessedImage = (
       }
 
       const img = new Image();
-      const cacheBustedUrl = `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+      img.crossOrigin = "anonymous";
+      img.decoding = "async";
 
       img.onload = () => {
         if (!isResolved) {
@@ -78,17 +81,16 @@ const preloadProcessedImage = (
       img.onerror = () => {
         if (isResolved) return;
         if (attempts >= maxAttempts) {
-          // If polling reached limit, resolve with url directly so UI renders it
           isResolved = true;
           clearTimeout(safetyTimeout);
           resolve(url);
         } else {
-          currentInterval = Math.min(currentInterval * 1.25, 1200);
+          currentInterval = Math.min(currentInterval * 1.2, 800);
           setTimeout(tryLoad, currentInterval);
         }
       };
 
-      img.src = cacheBustedUrl;
+      img.src = url;
     };
 
     tryLoad();
@@ -528,7 +530,7 @@ export function useUpload() {
         }
       }
 
-      // 7. Notify real-time listeners across Dashboard & History
+      // 7. Notify real-time listeners across Dashboard & History and update cache optimistically
       const newCutout = {
         id: (successData as any).projectId || successData.jobId || `proj-${Date.now()}`,
         originalUrl: successData.originalUrl || uploadFile.name,
@@ -537,6 +539,9 @@ export function useUpload() {
         status: "done",
         createdAt: new Date().toISOString(),
       };
+
+      const userKey = session?.user?.id || session?.user?.email || "guest";
+      optimisticallyAddProject(userKey, newCutout);
 
       if (!session?.user) {
         try {

@@ -30,6 +30,13 @@ import {
 import { SettingsModal } from "@/components/dashboard/SettingsModal";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
+import {
+  getCachedProjects,
+  fetchProjectsWithDeduplication,
+  optimisticallyDeleteProject,
+  optimisticallyAddProject,
+} from "@/utils/projectCache";
+
 export interface DashboardProject {
   id: string;
   originalUrl: string;
@@ -72,6 +79,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const { data: session } = useSession();
   const userEmail = session?.user?.email || user.email || "";
   const userId = session?.user?.id || user.id || "";
+  const userKey = userId || userEmail || "guest";
 
   const [stats, setStats] = useState(initialStats);
   const [recentProjects, setRecentProjects] = useState<DashboardProject[]>(initialRecentProjects);
@@ -116,47 +124,29 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   }, [session?.user, user.plan]);
 
   /**
-   * Auto-fetch fresh stats & projects from Supabase in background
+   * Auto-fetch fresh stats & projects from Supabase with request deduplication
    */
-  const fetchFreshData = useCallback(async () => {
+  const fetchFreshData = useCallback(async (force = false) => {
     try {
-      const emailQuery = userEmail ? `?userEmail=${encodeURIComponent(userEmail)}` : "";
-      const res = await fetch(`/api/projects${emailQuery}`, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
+      const projects = await fetchProjectsWithDeduplication(userEmail, userId, force);
+      const completedCount = projects.filter(
+        (p) => p.status === "done" || Boolean(p.processedUrl)
+      ).length;
 
-      if (res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const data = await res.json().catch(() => null);
-          if (data?.success && Array.isArray(data.projects)) {
-            const freshProjects: DashboardProject[] = data.projects;
-            const completedCount = freshProjects.filter(
-              (p) => p.status === "done" || Boolean(p.processedUrl)
-            ).length;
-
-            setRecentProjects(freshProjects.slice(0, 5));
-            setStats((prev) => ({
-              ...prev,
-              totalProjects: freshProjects.length,
-              totalProcessed: completedCount,
-            }));
-          }
-        }
-      }
+      setRecentProjects(projects.slice(0, 5));
+      setStats((prev) => ({
+        ...prev,
+        totalProjects: projects.length,
+        totalProcessed: completedCount,
+      }));
     } catch (err) {
       console.error("[DASHBOARD_AUTO_SYNC_ERROR]", err);
     }
   }, [userEmail, userId]);
 
-  // Initial mount sync from Supabase
+  // Initial mount sync with deduplication
   useEffect(() => {
-    fetchFreshData();
+    fetchFreshData(false);
   }, [fetchFreshData]);
 
   /**
@@ -165,8 +155,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetchFreshData();
-      showToast("Dashboard refreshed from database.");
+      await fetchFreshData(true);
+      showToast("Dashboard refreshed.");
     } catch (err) {
       console.error("[DASHBOARD_REFRESH_ERROR]", err);
       showToast("Could not refresh dashboard.");
@@ -177,12 +167,25 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
   // Real-time synchronization event listeners across tabs/components
   useEffect(() => {
-    const handleProjectCreated = () => {
-      fetchFreshData();
+    const handleProjectCreated = (e: any) => {
+      const newProj = e.detail;
+      if (newProj && newProj.id) {
+        setRecentProjects((prev) => {
+          if (prev.some((p) => p.id === newProj.id)) return prev;
+          return [newProj, ...prev].slice(0, 5);
+        });
+        setStats((prev) => ({
+          ...prev,
+          totalProjects: prev.totalProjects + 1,
+          totalProcessed: prev.totalProcessed + 1,
+        }));
+        optimisticallyAddProject(userKey, newProj);
+      }
+      fetchFreshData(false);
     };
 
     const handleHistoryRefresh = () => {
-      fetchFreshData();
+      fetchFreshData(false);
     };
 
     const handleProjectDeleted = (e: any) => {
@@ -194,8 +197,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           totalProjects: Math.max(0, prev.totalProjects - 1),
           totalProcessed: Math.max(0, prev.totalProcessed - 1),
         }));
+        optimisticallyDeleteProject(userKey, deletedId);
       }
-      fetchFreshData();
     };
 
     const handleAllDeleted = () => {
@@ -205,7 +208,6 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         totalProjects: 0,
         totalProcessed: 0,
       }));
-      fetchFreshData();
     };
 
     const handleCreditsUpdated = (e: any) => {
@@ -238,7 +240,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
     };
-  }, [fetchFreshData]);
+  }, [fetchFreshData, userKey]);
 
   /**
    * Delete single project from dashboard

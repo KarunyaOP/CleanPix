@@ -26,6 +26,14 @@ import {
 } from "lucide-react";
 import { DetectedCategory } from "@/types/schema";
 
+import {
+  getCachedProjects,
+  fetchProjectsWithDeduplication,
+  optimisticallyDeleteProject,
+  optimisticallyAddProject,
+  clearCachedProjects,
+} from "@/utils/projectCache";
+
 export interface ProjectRecord {
   id: string;
   originalUrl: string;
@@ -56,6 +64,10 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
 }) => {
   const router = useRouter();
   const { data: session } = useSession();
+  const userEmail = session?.user?.email || initialUser?.email || "";
+  const userId = session?.user?.id || (initialUser as any)?.id || "";
+  const userKey = userId || userEmail || "guest";
+
   const [projects, setProjects] = useState<ProjectRecord[]>(initialProjects);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [itemsPerPage, setItemsPerPage] = useState<number>(12);
@@ -72,8 +84,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const [liveCredits, setLiveCredits] = useState<number>(
     (session?.user as any)?.credits ?? initialUser?.credits ?? 10
   );
-  const userEmail = session?.user?.email || initialUser?.email || "";
-  const userId = session?.user?.id || (initialUser as any)?.id || "";
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -95,41 +105,20 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   }, [session?.user, initialUser]);
 
   /**
-   * Auto-fetch fresh history records from Supabase in background
+   * Auto-fetch fresh history records with request deduplication
    */
-  const fetchFreshHistory = useCallback(async () => {
+  const fetchFreshHistory = useCallback(async (force = false) => {
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const data = await res.json().catch(() => null);
-          if (data?.success && Array.isArray(data.projects)) {
-            setProjects(data.projects);
-          }
-        }
-      }
+      const freshProjects = await fetchProjectsWithDeduplication(userEmail, userId, force);
+      setProjects(freshProjects);
     } catch (err) {
       console.error("[HISTORY_AUTO_SYNC_ERROR]", err);
     }
   }, [userEmail, userId]);
 
-  // Initial mount live sync from Supabase
+  // Initial mount live sync with deduplication
   useEffect(() => {
-    fetchFreshHistory();
+    fetchFreshHistory(false);
   }, [fetchFreshHistory]);
 
   /**
@@ -138,56 +127,8 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const data = await res.json().catch(() => null);
-          if (data?.success && Array.isArray(data.projects)) {
-            setProjects(data.projects);
-            showToast("History refreshed from database.");
-            return;
-          }
-        }
-      }
-
-      // Guest fallback only if no authenticated user
-      if (!userEmail && !userId) {
-        const localData = localStorage.getItem("cleanpix_cutout_history");
-        if (localData) {
-          try {
-            const parsed = JSON.parse(localData);
-            if (Array.isArray(parsed)) {
-              const mapped: ProjectRecord[] = parsed.map((item: any) => ({
-                id: item.id || `local-${Math.random()}`,
-                originalUrl: item.originalUrl || item.cutoutUrl || "/images/hero-original.jpg",
-                processedUrl: item.cutoutUrl || item.processedUrl || "/images/hero-cutout.jpg",
-                detectedObject: item.category?.toLowerCase() || "cutout",
-                status: "done",
-                createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
-              }));
-              setProjects(mapped);
-              showToast("History is up to date.");
-              return;
-            }
-          } catch {}
-        }
-      }
-
-      showToast("History is up to date.");
+      await fetchFreshHistory(true);
+      showToast("History refreshed.");
     } catch (err) {
       console.error("[REFRESH_ERROR]", err);
       showToast("Could not refresh history.");
@@ -205,24 +146,27 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
           if (prev.some((p) => p.id === newProj.id)) return prev;
           return [newProj, ...prev];
         });
+        optimisticallyAddProject(userKey, newProj);
         showToast("New cutout added to history.");
       }
-      fetchFreshHistory();
+      fetchFreshHistory(false);
     };
 
     const handleHistoryRefresh = () => {
-      fetchFreshHistory();
+      fetchFreshHistory(false);
     };
 
     const handleProjectDeleted = (e: any) => {
       const deletedId = e.detail?.id;
       if (deletedId) {
         setProjects((prev) => prev.filter((p) => p.id !== deletedId));
+        optimisticallyDeleteProject(userKey, deletedId);
       }
     };
 
     const handleAllDeleted = () => {
       setProjects([]);
+      clearCachedProjects(userKey);
     };
 
     const handlePlanUpdated = (e: any) => {
@@ -252,7 +196,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
     };
-  }, [fetchFreshHistory]);
+  }, [fetchFreshHistory, userKey]);
 
   /**
    * Delete single project

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/providers/AuthProvider";
 import { DashboardClient, DashboardProject } from "@/components/dashboard/DashboardClient";
+import { getCachedProjects } from "@/utils/projectCache";
 import { Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -30,7 +31,8 @@ export default function DashboardPage() {
   }
 
   const user = session.user as any;
-  const creditsRemaining = user.credits ?? 10;
+  const userKey = user.id || user.email || "guest";
+  const cached = getCachedProjects(userKey);
 
   return (
     <DashboardClient
@@ -39,17 +41,17 @@ export default function DashboardPage() {
         name: user.name,
         email: user.email,
         image: user.image,
-        credits: creditsRemaining,
+        credits: user.credits ?? 10,
         plan: user.plan ?? "free",
         authProvider: user.authProvider || "email",
         createdAt: new Date().toISOString(),
       }}
       initialStats={{
-        totalProjects: 0,
-        totalProcessed: 0,
-        creditsRemaining,
+        totalProjects: cached.totalProjects,
+        totalProcessed: cached.totalProcessed,
+        creditsRemaining: user.credits ?? 10,
       }}
-      initialRecentProjects={[]}
+      initialRecentProjects={cached.projects.slice(0, 5)}
     />
   );
 }
