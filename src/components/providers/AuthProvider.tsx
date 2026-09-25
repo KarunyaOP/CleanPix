@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase, getRedirectUrl } from "@/lib/supabaseClient";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 
@@ -39,45 +39,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<CleanPixUser | null>(null);
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
 
-  // Persistent User Profile Cache Helpers
-  const getCachedProfile = (emailOrId: string): CleanPixUser | null => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem(`cleanpix_user_profile_${emailOrId.trim().toLowerCase()}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.email) return parsed;
-      }
-    } catch {}
-    return null;
-  };
-
-  const setCachedProfile = (profileUser: CleanPixUser) => {
-    if (typeof window === "undefined" || !profileUser.email) return;
-    try {
-      const key = `cleanpix_user_profile_${profileUser.email.trim().toLowerCase()}`;
-      localStorage.setItem(key, JSON.stringify(profileUser));
-      if (profileUser.id) {
-        localStorage.setItem(`cleanpix_user_profile_${profileUser.id}`, JSON.stringify(profileUser));
-      }
-    } catch {}
-  };
-
-  const clearCachedProfile = (emailOrId?: string | null) => {
-    if (typeof window === "undefined") return;
-    try {
-      if (emailOrId) {
-        localStorage.removeItem(`cleanpix_user_profile_${emailOrId.trim().toLowerCase()}`);
-      }
-      // Remove all cleanpix user profile keys
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith("cleanpix_user_profile_")) {
-          localStorage.removeItem(k);
-        }
-      }
-    } catch {}
-  };
+  const userRef = useRef<CleanPixUser | null>(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   // Deduping and Background Profile Sync Tracker
   const inFlightSyncRef = useRef<Promise<CleanPixUser | null> | null>(null);
@@ -85,18 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const lastSyncEmailRef = useRef<string | null>(null);
 
   const buildOptimisticUser = useCallback((sbUser: SupabaseUser): CleanPixUser => {
-    // 1. Check if we have a cached profile with accurate plan and credits
-    const cached = getCachedProfile(sbUser.email || sbUser.id);
-    if (cached) {
-      return {
-        ...cached,
-        id: sbUser.id,
-        email: sbUser.email || cached.email,
-        name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || cached.name || null,
-        image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || cached.image || null,
-      };
-    }
-
     return {
       id: sbUser.id,
       email: sbUser.email!,
@@ -119,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Skip duplicate sync if already processed recently unless explicitly forced
       if (!force && isSameUser && isRecentlySynced && !inFlightSyncRef.current) {
-        return user;
+        return userRef.current;
       }
 
       if (inFlightSyncRef.current) {
@@ -157,7 +110,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
                 lastSyncTimestampRef.current = Date.now();
                 lastSyncEmailRef.current = emailNorm;
-                setCachedProfile(profileUser);
                 setUser(profileUser);
                 return profileUser;
               }
@@ -168,7 +120,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const fallbackUser = buildOptimisticUser(sbUser);
           lastSyncTimestampRef.current = Date.now();
           lastSyncEmailRef.current = emailNorm;
-          setCachedProfile(fallbackUser);
           setUser((prev) => prev || fallbackUser);
           return fallbackUser;
         } catch (err) {
@@ -184,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       inFlightSyncRef.current = syncPromise;
       return syncPromise;
     },
-    [user, buildOptimisticUser]
+    [buildOptimisticUser]
   );
 
   useEffect(() => {
@@ -221,7 +172,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (event === "SIGNED_OUT" || !currentSession?.user) {
         lastSyncEmailRef.current = null;
         lastSyncTimestampRef.current = 0;
-        clearCachedProfile();
         setSession(null);
         setUser(null);
         setStatus("unauthenticated");
@@ -250,9 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (typeof e.detail?.credits === "number") {
         setUser((prev) => {
           if (!prev) return null;
-          const updated = { ...prev, credits: e.detail.credits };
-          setCachedProfile(updated);
-          return updated;
+          return { ...prev, credits: e.detail.credits };
         });
       }
     };
@@ -260,9 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (e.detail?.plan) {
         setUser((prev) => {
           if (!prev) return null;
-          const updated = { ...prev, plan: e.detail.plan };
-          setCachedProfile(updated);
-          return updated;
+          return { ...prev, plan: e.detail.plan };
         });
       }
     };
@@ -276,9 +222,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
       window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
     };
-  }, [syncUserProfile, buildOptimisticUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const signInWithOtp = async (email: string, callbackPath?: string) => {
+  const signInWithOtp = useCallback(async (email: string, callbackPath?: string) => {
     const emailRedirectTo = getRedirectUrl(callbackPath);
     console.log("[SUPABASE_SIGNIN_OTP_START]", { email, emailRedirectTo });
 
@@ -297,14 +244,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return result;
-  };
+  }, []);
 
-  const signOut = async (options?: { callbackUrl?: string }) => {
+  const signOut = useCallback(async (options?: { callbackUrl?: string }) => {
     try {
       console.log("[SUPABASE_SIGNOUT_START]");
       lastSyncEmailRef.current = null;
       lastSyncTimestampRef.current = 0;
-      clearCachedProfile(user?.email || user?.id);
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);
@@ -315,42 +261,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("[SUPABASE_SIGNOUT_ERROR]", err);
     }
-  };
+  }, []);
 
-  const update = async (newData?: any) => {
+  const update = useCallback(async (newData?: any) => {
     if (session?.user) {
       if (newData?.credits !== undefined) {
         setUser((prev) => {
           if (!prev) return null;
-          const updated = { ...prev, credits: newData.credits };
-          setCachedProfile(updated);
-          return updated;
+          return { ...prev, credits: newData.credits };
         });
       }
       if (newData?.plan !== undefined) {
         setUser((prev) => {
           if (!prev) return null;
-          const updated = { ...prev, plan: newData.plan };
-          setCachedProfile(updated);
-          return updated;
+          return { ...prev, plan: newData.plan };
         });
       }
       await syncUserProfile(session.user, session.access_token, true);
     }
-  };
+  }, [session, syncUserProfile]);
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      session,
+      status,
+      isLoading: status === "loading",
+      signInWithOtp,
+      signOut,
+      update,
+    }),
+    [user, session, status, signInWithOtp, signOut, update]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        status,
-        isLoading: status === "loading",
-        signInWithOtp,
-        signOut,
-        update,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
@@ -366,16 +311,19 @@ export const useSession = () => {
 
   const isReady = status === "authenticated" && Boolean(user);
 
-  return {
-    data: isReady
-      ? {
-          user: user!,
-          expires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : "",
-        }
-      : null,
-    status: isReady ? "authenticated" : status === "unauthenticated" ? "unauthenticated" : "loading",
-    update,
-  };
+  return useMemo(
+    () => ({
+      data: isReady
+        ? {
+            user: user!,
+            expires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : "",
+          }
+        : null,
+      status: isReady ? "authenticated" : status === "unauthenticated" ? "unauthenticated" : "loading",
+      update,
+    }),
+    [isReady, user, session?.expires_at, status, update]
+  );
 };
 
 export const signOut = async (options?: { callbackUrl?: string }) => {

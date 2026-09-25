@@ -16,12 +16,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useSession } from "@/components/providers/AuthProvider";
-import {
-  getCachedProjects,
-  fetchProjectsWithDeduplication,
-  optimisticallyDeleteProject,
-  optimisticallyAddProject,
-} from "@/utils/projectCache";
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -45,19 +39,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   const { data: session } = useSession();
   const userEmail = session?.user?.email || "";
   const userId = session?.user?.id || "";
-  const userKey = userId || userEmail || "guest";
 
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>(() => {
-    const cached = getCachedProjects(userKey);
-    return cached.projects.map((p: any) => ({
-      id: p.id,
-      originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-      cutoutUrl: p.processedUrl || p.originalUrl,
-      timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-    }));
-  });
-
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -68,7 +51,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   };
 
   /**
-   * Re-fetch latest project records with request deduplication
+   * Re-fetch latest project records from API
    */
   const loadHistory = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) {
@@ -76,16 +59,35 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     }
 
     try {
-      const projects = await fetchProjectsWithDeduplication(userEmail, userId, isManualRefresh);
-      const mapped: HistoryItem[] = projects.map((p: any) => ({
-        id: p.id,
-        originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-        cutoutUrl: p.processedUrl || p.originalUrl,
-        timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-      }));
-      setHistoryItems(mapped);
-      if (isManualRefresh) showToast("History refreshed.");
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+      const res = await fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success && Array.isArray(data.projects)) {
+          const mapped: HistoryItem[] = data.projects.map((p: any) => ({
+            id: p.id,
+            originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
+            cutoutUrl: p.processedUrl || p.originalUrl,
+            timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
+          }));
+          setHistoryItems(mapped);
+          if (isManualRefresh) showToast("History refreshed.");
+          return;
+        }
+      }
+      setHistoryItems([]);
     } catch (err) {
       console.error("[LOAD_HISTORY_MODAL_ERROR]", err);
       if (isManualRefresh) showToast("Failed to refresh history.");
@@ -96,73 +98,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // 1. Immediately hydrate from cache
-      const cached = getCachedProjects(userKey);
-      if (cached.projects.length > 0) {
-        const mapped: HistoryItem[] = cached.projects.map((p: any) => ({
-          id: p.id,
-          originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-          cutoutUrl: p.processedUrl || p.originalUrl,
-          timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-        }));
-        setHistoryItems(mapped);
-      }
-      // 2. Revalidate in background
       loadHistory(false);
     }
-  }, [isOpen, loadHistory, userKey]);
-
-  // Real-time Event Listeners
-  useEffect(() => {
-    const handleProjectCreated = (e: any) => {
-      const newProj = e.detail;
-      if (newProj) {
-        const newItem: HistoryItem = {
-          id: newProj.id || `hist-${Date.now()}`,
-          originalName: newProj.originalName || "cleanpix_cutout.png",
-          cutoutUrl: newProj.processedUrl || newProj.cutoutUrl || "/images/hero-cutout.jpg",
-          timestamp: "Just now",
-          category: newProj.detectedObject || "Cutout",
-        };
-        setHistoryItems((prev) => {
-          if (prev.some((item) => item.id === newItem.id)) return prev;
-          return [newItem, ...prev];
-        });
-        optimisticallyAddProject(userKey, newProj);
-        showToast("New cutout added to history.");
-      }
-      loadHistory(false);
-    };
-
-    const handleHistoryRefresh = () => {
-      loadHistory(false);
-    };
-
-    const handleProjectDeleted = (e: any) => {
-      const deletedId = e.detail?.id;
-      if (deletedId) {
-        setHistoryItems((prev) => prev.filter((item) => item.id !== deletedId));
-        optimisticallyDeleteProject(userKey, deletedId);
-      }
-    };
-
-    const handleAllDeleted = () => {
-      setHistoryItems([]);
-    };
-
-    window.addEventListener("cleanpix_project_created", handleProjectCreated);
-    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-    window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
-    window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-
-    return () => {
-      window.removeEventListener("cleanpix_project_created", handleProjectCreated);
-      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-      window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
-      window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-    };
-  }, [loadHistory, userKey]);
+  }, [isOpen, loadHistory]);
 
   // ESC key listener
   useEffect(() => {
@@ -224,27 +162,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         throw new Error(errJson.error?.message || "Failed to delete cutout from database.");
       }
 
-      // 1. Confirmed deletion: update UI
       setHistoryItems((prev) => prev.filter((item) => item.id !== id));
-
-      // 2. Dispatch events to notify HistoryClient and Dashboard
-      window.dispatchEvent(
-        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-      );
-      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
-
-      // 3. Clear from localStorage only if guest
-      if (!userEmail && !userId) {
-        try {
-          const stored = localStorage.getItem("cleanpix_cutout_history");
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            const filtered = parsed.filter((item: any) => item.id !== id);
-            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-          }
-        } catch {}
-      }
-
       showToast("Cutout deleted.");
     } catch (err: any) {
       console.error("[DELETE_ITEM_ERROR]", err);

@@ -26,14 +26,6 @@ import {
 } from "lucide-react";
 import { DetectedCategory } from "@/types/schema";
 
-import {
-  getCachedProjects,
-  fetchProjectsWithDeduplication,
-  optimisticallyDeleteProject,
-  optimisticallyAddProject,
-  clearCachedProjects,
-} from "@/utils/projectCache";
-
 export interface ProjectRecord {
   id: string;
   originalUrl: string;
@@ -66,7 +58,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const { data: session } = useSession();
   const userEmail = session?.user?.email || initialUser?.email || "";
   const userId = session?.user?.id || (initialUser as any)?.id || "";
-  const userKey = userId || userEmail || "guest";
 
   const [projects, setProjects] = useState<ProjectRecord[]>(initialProjects);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -90,6 +81,11 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Mount logging
+  useEffect(() => {
+    console.log("History mounted");
+  }, []);
+
   useEffect(() => {
     if (session?.user) {
       if ((session.user as any).plan) {
@@ -105,20 +101,42 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   }, [session?.user, initialUser]);
 
   /**
-   * Auto-fetch fresh history records with request deduplication
+   * Fetch fresh history records directly from API
    */
-  const fetchFreshHistory = useCallback(async (force = false) => {
+  const fetchFreshHistory = useCallback(async () => {
+    console.log("Fetching projects");
     try {
-      const freshProjects = await fetchProjectsWithDeduplication(userEmail, userId, force);
-      setProjects(freshProjects);
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
+
+      const res = await fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success && Array.isArray(data.projects)) {
+          console.log("Projects fetched", data.projects);
+          setProjects(data.projects);
+          return;
+        }
+      }
+      console.log("Projects fetched", []);
+      setProjects([]);
     } catch (err) {
-      console.error("[HISTORY_AUTO_SYNC_ERROR]", err);
+      console.error("Projects fetch failed", err);
     }
   }, [userEmail, userId]);
 
-  // Initial mount live sync with deduplication
+  // Initial mount live fetch
   useEffect(() => {
-    fetchFreshHistory(false);
+    fetchFreshHistory();
   }, [fetchFreshHistory]);
 
   /**
@@ -127,7 +145,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetchFreshHistory(true);
+      await fetchFreshHistory();
       showToast("History refreshed.");
     } catch (err) {
       console.error("[REFRESH_ERROR]", err);
@@ -136,67 +154,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
       setIsRefreshing(false);
     }
   };
-
-  // Real-time synchronization event listeners across tabs/components
-  useEffect(() => {
-    const handleProjectCreated = (e: any) => {
-      const newProj = e.detail;
-      if (newProj && newProj.id) {
-        setProjects((prev) => {
-          if (prev.some((p) => p.id === newProj.id)) return prev;
-          return [newProj, ...prev];
-        });
-        optimisticallyAddProject(userKey, newProj);
-        showToast("New cutout added to history.");
-      }
-      fetchFreshHistory(false);
-    };
-
-    const handleHistoryRefresh = () => {
-      fetchFreshHistory(false);
-    };
-
-    const handleProjectDeleted = (e: any) => {
-      const deletedId = e.detail?.id;
-      if (deletedId) {
-        setProjects((prev) => prev.filter((p) => p.id !== deletedId));
-        optimisticallyDeleteProject(userKey, deletedId);
-      }
-    };
-
-    const handleAllDeleted = () => {
-      setProjects([]);
-      clearCachedProjects(userKey);
-    };
-
-    const handlePlanUpdated = (e: any) => {
-      if (e.detail?.plan) {
-        setLivePlan(e.detail.plan);
-      }
-    };
-
-    const handleCreditsUpdated = (e: any) => {
-      if (typeof e.detail?.credits === "number") {
-        setLiveCredits(e.detail.credits);
-      }
-    };
-
-    window.addEventListener("cleanpix_project_created", handleProjectCreated);
-    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-    window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
-    window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
-    window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
-
-    return () => {
-      window.removeEventListener("cleanpix_project_created", handleProjectCreated);
-      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-      window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
-      window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-      window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
-      window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
-    };
-  }, [fetchFreshHistory, userKey]);
 
   /**
    * Delete single project
@@ -221,30 +178,8 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         throw new Error(errorData.error?.message || "Failed to delete cutout from database.");
       }
 
-      // 1. Confirmed deletion: update UI state
       setProjects((prev) => prev.filter((p) => p.id !== id));
-
-      // 2. Broadcast single deletion event and history refresh to Dashboard and HistoryModal
-      window.dispatchEvent(
-        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-      );
-      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
-
-      // 3. Update localStorage only if guest
-      if (!userEmail && !userId) {
-        try {
-          const localData = localStorage.getItem("cleanpix_cutout_history");
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            const filtered = parsed.filter((item: any) => item.id !== id);
-            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-          }
-        } catch {}
-      }
-
-      // 4. Fetch fresh history from Supabase
       await fetchFreshHistory();
-
       showToast("Cutout deleted from database.");
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
@@ -277,23 +212,8 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
         throw new Error(errorData.error?.message || "Failed to delete all history from database.");
       }
 
-      // 1. Confirmed deletion: clear state
       setProjects([]);
-
-      // 2. Broadcast event across tabs/components
-      window.dispatchEvent(new CustomEvent("cleanpix_project_all_deleted"));
-      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
-
-      // 3. Clear localStorage only if guest
-      if (!userEmail && !userId) {
-        try {
-          localStorage.removeItem("cleanpix_cutout_history");
-        } catch {}
-      }
-
-      // 4. Re-fetch from Supabase to confirm empty state
       await fetchFreshHistory();
-
       showToast("All processing history deleted permanently.");
     } catch (err: any) {
       console.error("[DELETE_ALL_ERROR]", err);

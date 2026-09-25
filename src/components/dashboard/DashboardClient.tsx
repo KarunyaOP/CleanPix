@@ -30,13 +30,6 @@ import {
 import { SettingsModal } from "@/components/dashboard/SettingsModal";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
-import {
-  getCachedProjects,
-  fetchProjectsWithDeduplication,
-  optimisticallyDeleteProject,
-  optimisticallyAddProject,
-} from "@/utils/projectCache";
-
 export interface DashboardProject {
   id: string;
   originalUrl: string;
@@ -79,7 +72,6 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const { data: session } = useSession();
   const userEmail = session?.user?.email || user.email || "";
   const userId = session?.user?.id || user.id || "";
-  const userKey = userId || userEmail || "guest";
 
   const [stats, setStats] = useState(initialStats);
   const [recentProjects, setRecentProjects] = useState<DashboardProject[]>(initialRecentProjects);
@@ -96,6 +88,11 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Mount logging
+  useEffect(() => {
+    console.log("Dashboard mounted");
+  }, []);
 
   // Payment success feedback
   useEffect(() => {
@@ -124,29 +121,51 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   }, [session?.user, user.plan]);
 
   /**
-   * Auto-fetch fresh stats & projects from Supabase with request deduplication
+   * Fetch fresh stats & projects from database
    */
-  const fetchFreshData = useCallback(async (force = false) => {
+  const fetchFreshData = useCallback(async () => {
+    console.log("Fetching projects");
     try {
-      const projects = await fetchProjectsWithDeduplication(userEmail, userId, force);
-      const completedCount = projects.filter(
-        (p) => p.status === "done" || Boolean(p.processedUrl)
-      ).length;
+      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
+      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
+      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
+      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
 
-      setRecentProjects(projects.slice(0, 5));
-      setStats((prev) => ({
-        ...prev,
-        totalProjects: projects.length,
-        totalProcessed: completedCount,
-      }));
+      const res = await fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(userEmail ? { "x-user-email": userEmail } : {}),
+          ...(userId ? { "x-user-id": userId } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success && Array.isArray(data.projects)) {
+          const projects = data.projects;
+          console.log("Projects fetched", projects);
+          const completedCount = projects.filter(
+            (p: any) => p.status === "done" || Boolean(p.processedUrl)
+          ).length;
+
+          setRecentProjects(projects.slice(0, 5));
+          setStats((prev) => ({
+            ...prev,
+            totalProjects: projects.length,
+            totalProcessed: completedCount,
+          }));
+          return;
+        }
+      }
+      console.log("Projects fetched", []);
     } catch (err) {
-      console.error("[DASHBOARD_AUTO_SYNC_ERROR]", err);
+      console.error("Projects fetch failed", err);
     }
   }, [userEmail, userId]);
 
-  // Initial mount sync with deduplication
+  // Initial mount fetch
   useEffect(() => {
-    fetchFreshData(false);
+    fetchFreshData();
   }, [fetchFreshData]);
 
   /**
@@ -155,7 +174,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetchFreshData(true);
+      await fetchFreshData();
       showToast("Dashboard refreshed.");
     } catch (err) {
       console.error("[DASHBOARD_REFRESH_ERROR]", err);
@@ -164,83 +183,6 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
       setIsRefreshing(false);
     }
   };
-
-  // Real-time synchronization event listeners across tabs/components
-  useEffect(() => {
-    const handleProjectCreated = (e: any) => {
-      const newProj = e.detail;
-      if (newProj && newProj.id) {
-        setRecentProjects((prev) => {
-          if (prev.some((p) => p.id === newProj.id)) return prev;
-          return [newProj, ...prev].slice(0, 5);
-        });
-        setStats((prev) => ({
-          ...prev,
-          totalProjects: prev.totalProjects + 1,
-          totalProcessed: prev.totalProcessed + 1,
-        }));
-        optimisticallyAddProject(userKey, newProj);
-      }
-      fetchFreshData(false);
-    };
-
-    const handleHistoryRefresh = () => {
-      fetchFreshData(false);
-    };
-
-    const handleProjectDeleted = (e: any) => {
-      const deletedId = e.detail?.id;
-      if (deletedId) {
-        setRecentProjects((prev) => prev.filter((p) => p.id !== deletedId));
-        setStats((prev) => ({
-          ...prev,
-          totalProjects: Math.max(0, prev.totalProjects - 1),
-          totalProcessed: Math.max(0, prev.totalProcessed - 1),
-        }));
-        optimisticallyDeleteProject(userKey, deletedId);
-      }
-    };
-
-    const handleAllDeleted = () => {
-      setRecentProjects([]);
-      setStats((prev) => ({
-        ...prev,
-        totalProjects: 0,
-        totalProcessed: 0,
-      }));
-    };
-
-    const handleCreditsUpdated = (e: any) => {
-      if (typeof e.detail?.credits === "number") {
-        setStats((prev) => ({
-          ...prev,
-          creditsRemaining: e.detail.credits,
-        }));
-      }
-    };
-
-    const handlePlanUpdated = (e: any) => {
-      if (e.detail?.plan) {
-        setUserPlan(e.detail.plan);
-      }
-    };
-
-    window.addEventListener("cleanpix_project_created", handleProjectCreated);
-    window.addEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-    window.addEventListener("cleanpix_project_deleted", handleProjectDeleted);
-    window.addEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-    window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
-    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
-
-    return () => {
-      window.removeEventListener("cleanpix_project_created", handleProjectCreated);
-      window.removeEventListener("cleanpix_history_refresh", handleHistoryRefresh);
-      window.removeEventListener("cleanpix_project_deleted", handleProjectDeleted);
-      window.removeEventListener("cleanpix_project_all_deleted", handleAllDeleted);
-      window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
-      window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
-    };
-  }, [fetchFreshData, userKey]);
 
   /**
    * Delete single project from dashboard
@@ -266,35 +208,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
         throw new Error(errorData.error?.message || "Failed to delete project from database.");
       }
 
-      // 1. Update local state immediately
       setRecentProjects((prev) => prev.filter((p) => p.id !== id));
-      setStats((prev) => ({
-        ...prev,
-        totalProjects: Math.max(0, prev.totalProjects - 1),
-        totalProcessed: Math.max(0, prev.totalProcessed - 1),
-      }));
-
-      // 2. Broadcast events to History views
-      window.dispatchEvent(
-        new CustomEvent("cleanpix_project_deleted", { detail: { id } })
-      );
-      window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
-
-      // 3. Clear from localStorage only if guest
-      if (!userEmail && !userId) {
-        try {
-          const localData = localStorage.getItem("cleanpix_cutout_history");
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            const filtered = parsed.filter((item: any) => item.id !== id);
-            localStorage.setItem("cleanpix_cutout_history", JSON.stringify(filtered));
-          }
-        } catch {}
-      }
-
-      // 4. Fetch fresh stats directly from Supabase to guarantee exact synchronization
       await fetchFreshData();
-
       showToast("Project deleted from database.");
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);

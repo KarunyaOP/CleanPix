@@ -33,8 +33,6 @@ export interface ToastState {
   duration?: number;
 }
 
-import { optimisticallyAddProject } from "@/utils/projectCache";
-
 /**
  * Preloads the transformed Cloudinary URL using standard Image element decoding
  * to guarantee instantaneous, flicker-free rendering when revealing the cutout.
@@ -530,41 +528,6 @@ export function useUpload() {
         }
       }
 
-      // 7. Notify real-time listeners across Dashboard & History and update cache optimistically
-      const newCutout = {
-        id: (successData as any).projectId || successData.jobId || `proj-${Date.now()}`,
-        originalUrl: successData.originalUrl || uploadFile.name,
-        processedUrl: successData.processedUrl,
-        detectedObject: successData.detectedObject || "other",
-        status: "done",
-        createdAt: new Date().toISOString(),
-      };
-
-      const userKey = session?.user?.id || session?.user?.email || "guest";
-      optimisticallyAddProject(userKey, newCutout);
-
-      if (!session?.user) {
-        try {
-          const stored = localStorage.getItem("cleanpix_cutout_history");
-          const list = stored ? JSON.parse(stored) : [];
-          const filtered = Array.isArray(list)
-            ? list.filter(
-                (item: any) =>
-                  item.processedUrl !== successData.processedUrl &&
-                  item.id !== newCutout.id
-              )
-            : [];
-          const updated = [newCutout, ...filtered.slice(0, 49)];
-          localStorage.setItem("cleanpix_cutout_history", JSON.stringify(updated));
-        } catch {}
-      }
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("cleanpix_project_created", { detail: newCutout })
-        );
-        window.dispatchEvent(new CustomEvent("cleanpix_history_refresh"));
-      }
     } catch (err: any) {
       console.error("[BACKGROUND_REMOVAL_FAILED]", err);
 
