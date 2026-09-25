@@ -7,8 +7,8 @@ export const ALLOWED_MIME_TYPES = [
   "image/webp",
 ] as const;
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-export const MAX_FILE_SIZE_MB = 10;
+export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB (Direct to Cloudinary)
+export const MAX_FILE_SIZE_MB = 20;
 
 export const FileUploadSchema = z.object({
   file: z.custom<File>((val) => val instanceof File, "A file is required"),

@@ -6,9 +6,9 @@ export const ALLOWED_MIME_TYPES = [
   "image/webp",
 ];
 
-export const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB strictly under Vercel's 4.5MB payload limit
-export const MAX_FILE_SIZE_MB = 4;
-export const MAX_IMAGE_MEGAPIXELS = 20; // 20 Megapixels strictly under Cloudinary AI limit (~25 MP)
+export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB direct to Cloudinary
+export const MAX_FILE_SIZE_MB = 20;
+export const MAX_IMAGE_MEGAPIXELS = 25; // 25 Megapixels (Cloudinary AI ceiling)
 
 export interface FileValidationResult {
   valid: boolean;
@@ -33,7 +33,7 @@ export function validateImageFile(file: File): FileValidationResult {
     };
   }
 
-  // 1. File Size Validation (<= 4MB)
+  // 1. File Size Validation (<= 20MB)
   if (file.size > MAX_FILE_SIZE_BYTES) {
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
     return {
@@ -67,7 +67,7 @@ export function validateImageFile(file: File): FileValidationResult {
 }
 
 /**
- * Validates image pixel dimensions against the 20 Megapixel ceiling.
+ * Validates image pixel dimensions against the 25 Megapixel ceiling.
  */
 export function validateImageResolution(width: number, height: number): FileValidationResult {
   if (width <= 0 || height <= 0) return { valid: true };
@@ -119,7 +119,7 @@ export async function getImageDimensions(file: File): Promise<{ width: number; h
 /**
  * Smart Client-Side Optimization:
  * Automatically downscales oversized or ultra-high-resolution images before upload.
- * Preserves exact aspect ratio and color sharpness, ensuring result is <4MB and <=20 Megapixels.
+ * Preserves exact aspect ratio and color sharpness, ensuring result is <=20MB and <=25 Megapixels.
  */
 export async function optimizeImageForUpload(file: File): Promise<File> {
   // If not in browser environment or file is empty, return original
@@ -134,12 +134,12 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
   const isOverSize = file.size > MAX_FILE_SIZE_BYTES;
   const isOverRes = megapixels > MAX_IMAGE_MEGAPIXELS;
 
-  // If already within 4MB and 20MP limits, preserve 100% original binary bytes
+  // If already within 20MB and 25MP limits, preserve 100% original binary bytes
   if (!isOverSize && !isOverRes && dims.width > 0) {
     return file;
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
 
@@ -153,22 +153,22 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
         return resolve(file);
       }
 
-      // Calculate target scaling factor to strictly satisfy < 20MP (target ~18.5MP max) and max dimension <= 4096px
+      // Calculate target scaling factor to strictly satisfy <= 25MP (target ~22MP max) and max dimension <= 5000px
       let scale = 1.0;
       const curMP = (srcWidth * srcHeight) / 1_000_000;
-      if (curMP > 19.0) {
-        scale = Math.min(scale, Math.sqrt(18.5 / curMP));
+      if (curMP > 24.0) {
+        scale = Math.min(scale, Math.sqrt(22.0 / curMP));
       }
 
       const maxDim = Math.max(srcWidth, srcHeight);
-      if (maxDim * scale > 4096) {
-        scale = Math.min(scale, 4096 / maxDim);
+      if (maxDim * scale > 5000) {
+        scale = Math.min(scale, 5000 / maxDim);
       }
 
-      // Additional downscale step if file byte size is heavily bloated
-      if (file.size > 8 * 1024 * 1024) {
+      // Additional downscale step if file byte size is heavily bloated over 20MB
+      if (file.size > 30 * 1024 * 1024) {
         scale = Math.min(scale, 0.75);
-      } else if (file.size > 4 * 1024 * 1024) {
+      } else if (file.size > 20 * 1024 * 1024) {
         scale = Math.min(scale, 0.90);
       }
 
@@ -192,7 +192,6 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
       const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
       const isWebp = file.type === "image/webp" || file.name.toLowerCase().endsWith(".webp");
 
-      // For PNG, test if PNG export fits under 3.8MB (well within 4MB limit)
       if (isPng) {
         canvas.toBlob(
           (blob) => {
@@ -204,7 +203,7 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
               return resolve(optimizedFile);
             }
 
-            // If PNG is still >4MB due to high texture complexity, export as high-quality JPEG (0.92)
+            // If PNG is still >20MB, export as high-quality JPEG (0.95)
             canvas.toBlob(
               (jpgBlob) => {
                 if (jpgBlob) {
@@ -218,7 +217,7 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
                 return resolve(file);
               },
               "image/jpeg",
-              0.92
+              0.95
             );
           },
           "image/png"
@@ -236,10 +235,10 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
             return resolve(file);
           },
           "image/webp",
-          0.92
+          0.95
         );
       } else {
-        // Default: High-Quality JPEG (0.92 quality maintains crisp edges and zero perceptible artifacts)
+        // Default: High-Quality JPEG (0.95 quality maintains crisp edges and zero perceptible artifacts)
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -252,7 +251,7 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
             return resolve(file);
           },
           "image/jpeg",
-          0.92
+          0.95
         );
       }
     };

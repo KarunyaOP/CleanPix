@@ -18,10 +18,208 @@ export interface BackgroundRemovalResult {
   framing?: string;
 }
 
+export interface DirectUploadSignatureResult {
+  signature: string;
+  timestamp: number;
+  apiKey: string;
+  cloudName: string;
+  folder: string;
+  type: "authenticated";
+  uploadUrl: string;
+  jobId: string;
+  params: Record<string, any>;
+}
+
+export interface ProcessDirectUploadParams {
+  publicId: string;
+  version?: number;
+  fileName: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  faces?: any[];
+  tags?: string[];
+  colors?: any[];
+  illustrationScore?: number;
+  framing?: "fit" | "balanced" | "spacious" | string;
+  jobId?: string;
+  userId?: string;
+}
+
 export class CloudinaryService {
   /**
+   * Generates a secure cryptographic signature for Direct-to-Cloudinary authenticated uploads.
+   * Allows files up to 20MB to stream directly from the browser to Cloudinary, completely bypassing Vercel's 4.5MB payload ceiling.
+   */
+  static generateDirectUploadSignature(userId?: string): DirectUploadSignatureResult {
+    if (!isCloudinaryConfigured()) {
+      const error: any = new Error(
+        "Cloudinary credentials are not configured. Please add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to your .env.local file."
+      );
+      error.code = "CLOUDINARY_NOT_CONFIGURED";
+      error.details = "Configure .env.local with valid Cloudinary API keys.";
+      throw error;
+    }
+
+    const cloudinary = getCloudinaryClient();
+    const cloudName = cloudinary.config().cloud_name || process.env.CLOUDINARY_CLOUD_NAME || "";
+    const apiKey = cloudinary.config().api_key || process.env.CLOUDINARY_API_KEY || "";
+    const apiSecret = cloudinary.config().api_secret || process.env.CLOUDINARY_API_SECRET || "";
+
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const folder = userId ? `cleanpix/users/${userId}` : `cleanpix/guest/${jobId}`;
+    const timestamp = Math.round(Date.now() / 1000);
+
+    const paramsToSign: Record<string, any> = {
+      colors: true,
+      faces: true,
+      folder,
+      image_metadata: true,
+      timestamp,
+      type: "authenticated",
+    };
+
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
+
+    return {
+      signature,
+      timestamp,
+      apiKey,
+      cloudName,
+      folder,
+      type: "authenticated",
+      uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      jobId,
+      params: paramsToSign,
+    };
+  }
+
+  /**
+   * Processes a direct-uploaded Cloudinary asset:
+   * - Performs AI subject classification
+   * - Generates authenticated HMAC SHA-256 signed URLs (Standard cutout, HD cutout, Original asset)
+   * - Polls transformation readiness
+   */
+  static async processDirectUploadedImage(
+    params: ProcessDirectUploadParams
+  ): Promise<BackgroundRemovalResult> {
+    const {
+      publicId,
+      version,
+      fileName,
+      width = 800,
+      height = 800,
+      format = "png",
+      faces,
+      tags,
+      colors,
+      illustrationScore,
+      framing = "fit",
+      jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      userId,
+    } = params;
+
+    if (!publicId) {
+      throw new Error("Missing publicId for Cloudinary background removal processing");
+    }
+
+    // Security check: If authenticated userId is provided, ensure publicId is scoped under their folder
+    if (userId && !publicId.startsWith(`cleanpix/users/${userId}/`)) {
+      console.warn(`[CLOUDINARY_OWNERSHIP_WARN] publicId '${publicId}' does not match userId '${userId}'`);
+    }
+
+    if (!isCloudinaryConfigured()) {
+      const error: any = new Error("Cloudinary credentials are not configured.");
+      error.code = "CLOUDINARY_NOT_CONFIGURED";
+      throw error;
+    }
+
+    const cloudinary = getCloudinaryClient();
+
+    try {
+      // 1. Classify subject using Cloudinary face detection + visual/metadata analysis + geometry
+      const detectedObject = classifyImageSubject({
+        fileName,
+        faces,
+        tags,
+        colors,
+        illustrationScore,
+        width,
+        height,
+      });
+
+      // Normalize framing choice
+      const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
+      const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
+      const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
+
+      // 2. Construct genuine Standard Cloudinary AI Background Removal transformed URL with HMAC signature
+      const standardTransformation = isSpacious
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_100"
+        : isBalanced
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_100"
+        : "e_background_removal:fineedges_y/cs_srgb,q_100";
+
+      const processedUrl = cloudinary.url(publicId, {
+        type: "authenticated",
+        sign_url: true,
+        raw_transformation: standardTransformation,
+        format: "png",
+        secure: true,
+        version: version,
+      });
+
+      // 3. Construct HD Enhanced Cloudinary AI Background Removal transformed URL with HMAC signature
+      const hdTransformation = isSpacious
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
+        : isBalanced
+        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
+        : "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100";
+
+      const hdUrl = cloudinary.url(publicId, {
+        type: "authenticated",
+        sign_url: true,
+        raw_transformation: hdTransformation,
+        format: "png",
+        secure: true,
+        version: version,
+      });
+
+      // 4. Construct signed original image URL with HMAC protection
+      const originalUrl = cloudinary.url(publicId, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        version: version,
+        format: format,
+      });
+
+      // 5. Server-side quick polling to verify processing status of standard cutout
+      await this.verifyOrPollCloudinaryUrl(processedUrl, 10, 1500);
+
+      return {
+        jobId,
+        originalUrl,
+        processedUrl,
+        hdUrl,
+        publicId,
+        version,
+        detectedObject,
+        width,
+        height,
+        format: "png",
+        provider: "cloudinary",
+        framing: normalizedFraming,
+      };
+    } catch (cloudinaryError: any) {
+      console.error("[CLOUDINARY_PROCESS_DIRECT_ERROR]", cloudinaryError);
+      throw cloudinaryError;
+    }
+  }
+
+  /**
    * Upload an image to Cloudinary and execute real AI Background Removal (e_background_removal)
-   * with custom Framing composition (Fit 0%, Balanced 50%, Spacious 100%)
+   * with custom Framing composition (Fit 0%, Balanced 50%, Spacious 100%) - Fallback endpoint
    */
   static async removeBackground(
     buffer: Buffer,
@@ -68,84 +266,21 @@ export class CloudinaryService {
         uploadStream.end(buffer);
       });
 
-      // 3. Classify dominant subject using Cloudinary face detection + visual/metadata analysis + geometry
-      const detectedObject = classifyImageSubject({
+      return await this.processDirectUploadedImage({
+        publicId: uploadResult.public_id,
+        version: uploadResult.version,
         fileName,
+        width: uploadResult.width,
+        height: uploadResult.height,
+        format: uploadResult.format,
         faces: uploadResult.faces,
         tags: uploadResult.tags,
         colors: uploadResult.colors,
         illustrationScore: uploadResult.illustration_score,
-        width: uploadResult.width,
-        height: uploadResult.height,
-      });
-
-      // Normalize framing choice
-      const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
-      const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
-      const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
-
-      // 4. Construct genuine Standard Cloudinary AI Background Removal transformed URL with fine edge, color space preservation, and HMAC signature
-      // Fit (0%): tight framing with fine edges
-      // Balanced (50%): 25% extra canvas with b_transparent,c_pad
-      // Spacious (100%): 50% extra canvas with b_transparent,c_pad
-      const standardTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_100"
-        : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_100"
-        : "e_background_removal:fineedges_y/cs_srgb,q_100";
-
-      const processedUrl = cloudinary.url(uploadResult.public_id, {
-        type: "authenticated",
-        sign_url: true,
-        raw_transformation: standardTransformation,
-        format: "png",
-        secure: true,
-        version: uploadResult.version,
-      });
-
-      // 5. Construct HD Enhanced Cloudinary AI Background Removal transformed URL with cryptographic HMAC signature:
-      // Preserves original contrast and color vibrancy via cs_srgb + 2x DPR resolution + clean unsharp mask (e_unsharp_mask:120) + lossless 100% PNG quality
-      const hdTransformation = isSpacious
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-        : isBalanced
-        ? "e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100"
-        : "e_background_removal:fineedges_y/dpr_2.0,e_unsharp_mask:120,cs_srgb,q_100";
-
-      const hdUrl = cloudinary.url(uploadResult.public_id, {
-        type: "authenticated",
-        sign_url: true,
-        raw_transformation: hdTransformation,
-        format: "png",
-        secure: true,
-        version: uploadResult.version,
-      });
-
-      // 6. Construct signed original image URL with HMAC protection
-      const originalUrl = cloudinary.url(uploadResult.public_id, {
-        type: "authenticated",
-        sign_url: true,
-        secure: true,
-        version: uploadResult.version,
-        format: uploadResult.format,
-      });
-
-      // 7. Server-side quick polling to verify processing status of standard cutout
-      await this.verifyOrPollCloudinaryUrl(processedUrl, 10, 1500);
-
-      return {
+        framing,
         jobId,
-        originalUrl,
-        processedUrl,
-        hdUrl,
-        publicId: uploadResult.public_id,
-        version: uploadResult.version,
-        detectedObject,
-        width: uploadResult.width || 800,
-        height: uploadResult.height || 800,
-        format: "png",
-        provider: "cloudinary",
-        framing: normalizedFraming,
-      };
+        userId,
+      });
     } catch (cloudinaryError: any) {
       console.error("[CLOUDINARY_API_ERROR]", cloudinaryError);
       
@@ -154,7 +289,7 @@ export class CloudinaryService {
         (cloudinaryError.message && cloudinaryError.message.includes("Invalid Signature"))
       ) {
         const error: any = new Error(
-          "Cloudinary Authentication Failed (401 Invalid Signature). Please verify that your CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in .env.local exactly match your Cloudinary dashboard (or use the one-click CLOUDINARY_URL variable from the Cloudinary dashboard)."
+          "Cloudinary Authentication Failed (401 Invalid Signature). Please verify that your CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in .env.local exactly match your Cloudinary dashboard."
         );
         error.code = "CLOUDINARY_AUTH_ERROR";
         error.details = cloudinaryError.message;

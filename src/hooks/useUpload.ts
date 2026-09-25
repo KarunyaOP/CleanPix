@@ -95,6 +95,59 @@ const preloadProcessedImage = (
   });
 };
 
+/**
+ * Direct upload helper that streams binary file directly from browser to Cloudinary
+ * Completely bypassing Vercel 4.5MB payload limit and supporting files up to 20MB.
+ */
+const uploadDirectToCloudinary = (
+  uploadUrl: string,
+  formData: FormData,
+  onProgress?: (percent: number) => void
+): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadUrl, true);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let data: any = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = { message: xhr.responseText };
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        const error: any = new Error(
+          data?.error?.message || `Cloudinary upload failed with status ${xhr.status}`
+        );
+        error.code = data?.error?.code || "DIRECT_UPLOAD_FAILED";
+        error.details = data?.error?.message;
+        error.status = xhr.status;
+        reject(error);
+      }
+    };
+
+    xhr.onerror = () => {
+      const error: any = new Error("Network error during direct image upload.");
+      error.code = "NETWORK_ERROR";
+      reject(error);
+    };
+
+    xhr.send(formData);
+  });
+};
+
 export function useUpload() {
   const { data: session, update: updateSession } = useSession();
   const [file, setFile] = useState<File | null>(null);
@@ -178,7 +231,7 @@ export function useUpload() {
         return;
       }
 
-      // 2. Smart Client-Side Downscaling (if file is oversized >4MB or >20 Megapixels)
+      // 2. Smart Client-Side Optimization (if file is oversized >20MB or >25 Megapixels)
       let activeFile = selectedFile;
       try {
         activeFile = await optimizeImageForUpload(selectedFile);
@@ -187,7 +240,7 @@ export function useUpload() {
         activeFile = selectedFile;
       }
 
-      // 3. Final Client-Side File Size & Type Validation
+      // 3. Final Client-Side File Size & Type Validation (<=20MB)
       const validation = validateImageFile(activeFile);
       if (!validation.valid && validation.error) {
         setError(validation.error);
@@ -212,7 +265,7 @@ export function useUpload() {
       setIsProcessingAI(false);
       setUploadProgress(0);
 
-      // 5. Read dimensions asynchronously, validate 20MP ceiling, and refine classification
+      // 5. Read dimensions asynchronously, validate 25MP ceiling, and refine classification
       getImageDimensions(activeFile).then((dims) => {
         setDimensions(dims);
         const resValidation = validateImageResolution(dims.width, dims.height);
@@ -288,12 +341,12 @@ export function useUpload() {
 
     setIsUploading(true);
     setIsProcessingAI(true);
-    setUploadProgress(25);
+    setUploadProgress(15);
     setHdError(null);
     setIsHdReady(false);
 
     try {
-      // 1. Ensure file is within strict 4MB limit before uploading
+      // 1. Ensure file is within 20MB limit before uploading
       let uploadFile = file;
       if (uploadFile.size > MAX_FILE_SIZE_BYTES) {
         uploadFile = await optimizeImageForUpload(file);
@@ -308,102 +361,158 @@ export function useUpload() {
         };
       }
 
-      // 2. Prepare FormData with exact uploaded file and selected framing
-      const formData = new FormData();
-      formData.append("file", uploadFile);
-      formData.append("framing", framingStr);
-      formData.append(
-        "paddingPercent",
-        String(
-          typeof activeFraming === "number"
-            ? activeFraming
-            : activeFraming === "spacious"
-            ? 100
-            : activeFraming === "balanced"
-            ? 50
-            : 0
-        )
-      );
-      if (session?.user?.email) {
-        formData.append("userEmail", session.user.email);
-      }
-      if (session?.user?.id) {
-        formData.append("userId", session.user.id);
-      }
-
-      setUploadProgress(50);
-
-      // 3. Send to /api/remove-background for Cloudinary AI processing
-      const response = await fetch("/api/remove-background", {
+      // 2. Request Direct-to-Cloudinary upload signature from backend
+      setUploadProgress(25);
+      const signRes = await fetch("/api/upload/sign", {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
           ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
         },
-        body: formData,
+        body: JSON.stringify({
+          fileName: uploadFile.name,
+          fileSize: uploadFile.size,
+          fileType: uploadFile.type || "image/png",
+          framing: framingStr,
+          userId: session?.user?.id,
+          userEmail: session?.user?.email,
+        }),
       });
 
-      setUploadProgress(75);
-
-      // Safe JSON Parsing: Never call response.json() without checking response.ok and content-type
-      let data: any = null;
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        try {
-          data = await response.json();
-        } catch (jsonErr) {
-          console.warn("[BACKGROUND_REMOVAL_JSON_PARSE_WARN]", jsonErr);
-          data = null;
-        }
-      } else {
-        const rawText = await response.text().catch(() => "");
-        data = { message: rawText };
+      let signData: any = null;
+      const signContentType = signRes.headers.get("content-type") || "";
+      if (signContentType.includes("application/json")) {
+        signData = await signRes.json().catch(() => null);
       }
 
-      if (!response.ok || (data && "error" in data)) {
-        let errCode = data?.error?.code || "AI_PROCESSING_FAILED";
-        let errMsg = data?.error?.message;
-        const errDetails = data?.error?.details || data?.message;
-
-        if (response.status === 413) {
-          errCode = "FILE_TOO_LARGE";
-          errMsg = errMsg || "Image exceeds maximum upload size (4MB).";
-        } else if (response.status === 400) {
-          errCode = data?.error?.code || "INVALID_REQUEST";
-          errMsg = errMsg || "Invalid image request or unsupported file format.";
-        } else if (response.status === 401) {
-          errCode = "UNAUTHORIZED";
-          errMsg = "You must be signed in to perform this action.";
-        } else if (response.status === 403) {
-          errCode = data?.error?.code || "INSUFFICIENT_CREDITS";
-          errMsg = errMsg || "You have 0 credits remaining. Please upgrade your plan to continue.";
-        } else if (response.status >= 500) {
-          errCode = "SERVER_ERROR";
-          errMsg = errMsg || "Image processing service is temporarily unavailable. Please try again in a moment.";
+      if (!signRes.ok || !signData?.signature) {
+        if (signRes.status === 403) {
+          throw {
+            code: "INSUFFICIENT_CREDITS",
+            message: "You have 0 credits remaining. Please upgrade your plan to continue.",
+          };
         }
-
         throw {
-          code: errCode,
-          message: errMsg || "Failed to remove background from image.",
-          details: errDetails,
+          code: signData?.error?.code || "SIGNATURE_FAILED",
+          message: signData?.error?.message || "Failed to initialize secure upload.",
+          details: signData?.error?.details,
         };
       }
 
-      const successData = data as BackgroundRemovalResponse;
+      // 3. Direct Upload from Browser directly to Cloudinary (bypassing Vercel 4.5MB limit)
+      setUploadProgress(35);
+      const directFormData = new FormData();
+      directFormData.append("file", uploadFile);
+      directFormData.append("api_key", signData.apiKey);
+      directFormData.append("timestamp", String(signData.timestamp));
+      directFormData.append("signature", signData.signature);
+      directFormData.append("folder", signData.folder);
+      directFormData.append("type", signData.type || "authenticated");
+      directFormData.append("faces", "true");
+      directFormData.append("colors", "true");
+      directFormData.append("image_metadata", "true");
+
+      let cloudinaryResult: any = null;
+      try {
+        cloudinaryResult = await uploadDirectToCloudinary(
+          signData.uploadUrl,
+          directFormData,
+          (percent) => {
+            // Map direct upload progress from 35% -> 65%
+            const mapped = 35 + Math.round(percent * 0.3);
+            setUploadProgress(mapped);
+          }
+        );
+      } catch (directUploadErr: any) {
+        console.warn("[DIRECT_UPLOAD_FAILED, FALLBACK_CHECK]", directUploadErr);
+        // If file is <= 4MB and direct upload failed, fallback to server proxy
+        if (uploadFile.size <= 4 * 1024 * 1024) {
+          const fallbackFormData = new FormData();
+          fallbackFormData.append("file", uploadFile);
+          fallbackFormData.append("framing", framingStr);
+          if (session?.user?.email) fallbackFormData.append("userEmail", session.user.email);
+          if (session?.user?.id) fallbackFormData.append("userId", session.user.id);
+
+          const fallbackRes = await fetch("/api/remove-background", {
+            method: "POST",
+            headers: {
+              ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+              ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
+            },
+            body: fallbackFormData,
+          });
+          const fallbackData = await fallbackRes.json().catch(() => null);
+          if (!fallbackRes.ok) throw fallbackData?.error || directUploadErr;
+          cloudinaryResult = fallbackData;
+        } else {
+          throw directUploadErr;
+        }
+      }
+
+      // 4. Send processing request to backend for subject classification & signed HMAC URL generation
+      setUploadProgress(70);
+      let successData: BackgroundRemovalResponse;
+
+      if (cloudinaryResult?.processedUrl) {
+        successData = cloudinaryResult;
+      } else {
+        const processRes = await fetch("/api/remove-background", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.user?.email ? { "x-user-email": session.user.email } : {}),
+            ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
+          },
+          body: JSON.stringify({
+            publicId: cloudinaryResult.public_id,
+            version: cloudinaryResult.version,
+            fileName: uploadFile.name,
+            width: cloudinaryResult.width,
+            height: cloudinaryResult.height,
+            format: cloudinaryResult.format,
+            faces: cloudinaryResult.faces,
+            tags: cloudinaryResult.tags,
+            colors: cloudinaryResult.colors,
+            illustrationScore: cloudinaryResult.illustration_score,
+            framing: framingStr,
+            jobId: signData.jobId,
+            userId: session?.user?.id || signData.userId,
+            userEmail: session?.user?.email,
+          }),
+        });
+
+        let processData: any = null;
+        const processContentType = processRes.headers.get("content-type") || "";
+        if (processContentType.includes("application/json")) {
+          processData = await processRes.json().catch(() => null);
+        }
+
+        if (!processRes.ok || !processData?.success) {
+          throw {
+            code: processData?.error?.code || "AI_PROCESSING_FAILED",
+            message: processData?.error?.message || "Failed to remove background from image.",
+            details: processData?.error?.details,
+          };
+        }
+
+        successData = processData;
+      }
+
       setJobId(successData.jobId);
       setDetectedObject(successData.detectedObject);
       if (successData.hdUrl) {
         setHdUrl(successData.hdUrl);
       }
-      setUploadProgress(90);
+      setUploadProgress(85);
 
-      // 4. Preload genuine Cloudinary background-removed URL to ensure transparent PNG is ready
+      // 5. Preload genuine Cloudinary background-removed URL
       await preloadProcessedImage(successData.processedUrl);
 
       setProcessedUrl(successData.processedUrl);
       setUploadProgress(100);
 
-      // 5. Update credits in real-time across Navbar, Dashboard, and Settings
+      // 6. Update credits across UI
       if (typeof successData.creditsRemaining === "number") {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -419,42 +528,9 @@ export function useUpload() {
         }
       }
 
-      // 6. Save to database for authenticated user and guarantee persistence
-      let verifiedProjectId = (successData as any).projectId || successData.jobId || `proj-${Date.now()}`;
-      if (session?.user?.email) {
-        try {
-          const saveRes = await fetch("/api/projects", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-user-email": session.user.email,
-              ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
-            },
-            body: JSON.stringify({
-              userId: session.user.id,
-              userEmail: session.user.email,
-              originalUrl: successData.originalUrl || uploadFile.name,
-              processedUrl: successData.processedUrl,
-              detectedObject: successData.detectedObject || "other",
-            }),
-          });
-          if (saveRes.ok) {
-            const saveContentType = saveRes.headers.get("content-type") || "";
-            if (saveContentType.includes("application/json")) {
-              const saveJson = await saveRes.json().catch(() => null);
-              if (saveJson?.project?.id) {
-                verifiedProjectId = saveJson.project.id;
-              }
-            }
-          }
-        } catch (dbErr) {
-          console.error("[PROJECT_PERSISTENCE_SYNC_ERROR]", dbErr);
-        }
-      }
-
       // 7. Notify real-time listeners across Dashboard & History
       const newCutout = {
-        id: verifiedProjectId,
+        id: (successData as any).projectId || successData.jobId || `proj-${Date.now()}`,
         originalUrl: successData.originalUrl || uploadFile.name,
         processedUrl: successData.processedUrl,
         detectedObject: successData.detectedObject || "other",
@@ -462,7 +538,6 @@ export function useUpload() {
         createdAt: new Date().toISOString(),
       };
 
-      // Guest only: keep local cache when unauthenticated
       if (!session?.user) {
         try {
           const stored = localStorage.getItem("cleanpix_cutout_history");
