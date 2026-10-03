@@ -48,7 +48,7 @@ def segment_image_advanced(img: Image.Image) -> Image.Image:
 
     # 1. Superpixel Segmentation with SLIC
     n_segments = min(600, max(150, int((w * h) / 550)))
-    labels = seg.slic(rgb_arr, compactness=20, n_segments=n_segments, start_label=1)
+    labels = seg.slic(rgb_arr, compactness=8, n_segments=n_segments, start_label=1)
     unique_labels = np.unique(labels)
 
     # 2. Build Region Adjacency Graph (RAG)
@@ -127,28 +127,103 @@ def segment_image_advanced(img: Image.Image) -> Image.Image:
                     expanded_bg.add(neighbor)
                     queue.append(neighbor)
 
-    # 6. Foreground Mask Construction & Core Protection
+    # 6. Foreground Mask Construction & Diagnostic Measurement
     fg_mask = ~np.isin(labels, list(expanded_bg))
     fg_mask = ndi.binary_fill_holes(fg_mask)
+    foreground_pixels_before_cleanup = int(np.sum(fg_mask))
 
-    # Preserve significant components and central subjects without eroding fine details
+    # Identify connected components and main central subject
     labeled_fg, num_comp = ndi.label(fg_mask)
-    if num_comp > 0:
-        comp_sizes = [np.sum(labeled_fg == i) for i in range(1, num_comp + 1)]
-        max_size = max(comp_sizes)
+    comp_sizes = [np.sum(labeled_fg == i) for i in range(1, num_comp + 1)]
+    max_size = max(comp_sizes) if comp_sizes else 1
+    
+    half_box = max(10, min(h_idx, w_idx) // 8)
+    center_box = labeled_fg[
+        int(max(0, center_y - half_box)):int(min(h_idx, center_y + half_box)),
+        int(max(0, center_x - half_box)):int(min(w_idx, center_x + half_box))
+    ]
+    center_labels = set(np.unique(center_box)) - {0}
+    if not center_labels and comp_sizes:
+        center_labels = {int(np.argmax(comp_sizes) + 1)}
+
+    main_subject_mask = np.isin(labeled_fg, list(center_labels))
+    if np.sum(main_subject_mask) > 0:
+        main_subject_lab = np.mean(lab_arr[main_subject_mask], axis=0)
+    else:
+        main_subject_lab = np.array([50.0, 0.0, 0.0])
+
+    # Distance transform from main subject (for proximity-aware recovery)
+    dist_from_main = ndi.distance_transform_edt(~main_subject_mask)
+    max_proximity_dist = max(18.0, min(w, h) * 0.15)
+
+    # 7. Foreground Recovery Pass: Preserve disconnected islands, saturated accents, line-art, and color-consistent features
+    L_chan = lab_arr[:, :, 0]
+    a_chan = lab_arr[:, :, 1]
+    b_chan = lab_arr[:, :, 2]
+    chroma = np.sqrt(a_chan**2 + b_chan**2)
+
+    valid_labels = set(center_labels)
+    recovered_components_count = 0
+
+    # Evaluate connected components without aggressive size pruning
+    for i in range(1, num_comp + 1):
+        if i in center_labels:
+            continue
+        c_size = comp_sizes[i - 1]
+        c_mask = (labeled_fg == i)
         
-        # Identify components intersecting center box
-        half_box = max(10, min(h_idx, w_idx) // 10)
-        center_box = labeled_fg[
-            int(max(0, center_y - half_box)):int(min(h_idx, center_y + half_box)),
-            int(max(0, center_x - half_box)):int(min(w_idx, center_x + half_box))
-        ]
-        center_labels = set(np.unique(center_box)) - {0}
+        c_lab = np.mean(lab_arr[c_mask], axis=0)
+        c_dist_to_bg = np.sqrt(np.sum((c_lab - mean_bg)**2))
+        c_dist_to_fg = np.sqrt(np.sum((c_lab - main_subject_lab)**2))
+        min_dist_to_main = np.min(dist_from_main[c_mask])
         
-        # Retain any foreground component that is >= 1% of max size OR touches center
-        valid_labels = set([i + 1 for i, s in enumerate(comp_sizes) if s >= max(10, 0.01 * max_size)]) | center_labels
-        fg_mask = np.isin(labeled_fg, list(valid_labels))
-        fg_mask = ndi.binary_fill_holes(fg_mask)
+        c_mean_chroma = np.mean(chroma[c_mask])
+        c_mean_L = np.mean(L_chan[c_mask])
+        
+        # Saturated accents (cheeks/eyes: high chroma + warm a*) or dark line-art (L < 35)
+        has_accent = (c_mean_chroma > 18.0 and c_lab[1] > 0)
+        is_line_art = (c_mean_L < 35.0)
+        is_color_consistent = (c_dist_to_fg < 35.0)
+        is_distinct_bg = (c_dist_to_bg > 20.0)
+
+        # Retain if color-consistent, near main subject, saturated accent, line-art, or non-trivial size
+        if is_distinct_bg and (
+            is_color_consistent or
+            min_dist_to_main < max_proximity_dist or
+            has_accent or
+            is_line_art or
+            c_size >= max(5, 0.002 * max_size)
+        ):
+            valid_labels.add(i)
+            recovered_components_count += 1
+
+    fg_mask = np.isin(labeled_fg, list(valid_labels))
+
+    # Superpixel-level fine detail recovery pass for thin line-art & accents in close proximity
+    recovered_sp_count = 0
+    for sp in unique_labels:
+        if sp in expanded_bg:
+            sp_mask = (labels == sp)
+            min_d = np.min(dist_from_main[sp_mask])
+            if min_d < max_proximity_dist * 0.6:
+                sp_lab = superpixel_mean_lab[sp]
+                sp_dist_bg = np.sqrt(np.sum((sp_lab - mean_bg)**2))
+                sp_dist_fg = np.sqrt(np.sum((sp_lab - main_subject_lab)**2))
+                sp_chroma = np.mean(chroma[sp_mask])
+                sp_L = np.mean(L_chan[sp_mask])
+                
+                # Recover superpixel if high-chroma accent or dark line art and distinct from background
+                if sp_dist_bg > 28.0 and ((sp_chroma > 22.0 and sp_lab[1] > 5.0) or sp_L < 28.0 or sp_dist_fg < 25.0):
+                    fg_mask[sp_mask] = True
+                    recovered_sp_count += 1
+
+    fg_mask = ndi.binary_fill_holes(fg_mask)
+    foreground_pixels_after_cleanup = int(np.sum(fg_mask))
+
+    # Output diagnostic logs
+    sys.stderr.write(f"foreground_pixels_before_cleanup={foreground_pixels_before_cleanup}\n")
+    sys.stderr.write(f"foreground_pixels_after_cleanup={foreground_pixels_after_cleanup}\n")
+    sys.stderr.write(f"recovered_components_count={recovered_components_count + recovered_sp_count}\n")
 
     # 7. Sub-pixel Antialiasing & Contour Smoothing
     smooth_alpha = ndi.gaussian_filter(fg_mask.astype(np.float32) * 255.0, sigma=0.8)
