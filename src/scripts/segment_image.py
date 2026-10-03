@@ -117,7 +117,7 @@ def segment_image_advanced(img: Image.Image) -> Image.Image:
 
                 # Adaptive spatial threshold:
                 if center_dist_norm > 0.35:
-                    is_bg = mahal_dist < 3.8 or euc_dist < 42.0 or (weight < 26.0 and euc_dist < 52.0)
+                    is_bg = mahal_dist < 5.0 or euc_dist < 60.0 or (weight < 35.0 and euc_dist < 70.0)
                 elif center_dist_norm > 0.18:
                     is_bg = (mahal_dist < 2.8 and euc_dist < 30.0) or (weight < 16.0 and euc_dist < 34.0)
                 else:
