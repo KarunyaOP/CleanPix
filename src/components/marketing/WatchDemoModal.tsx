@@ -182,7 +182,7 @@ export const WatchDemoModal: React.FC<WatchDemoModalProps> = ({
             {activeStep === 2 && (
               <div className="relative w-full h-full checkerboard-pattern flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
                 <img
-                  src="/images/hero-cutout.jpg"
+                  src="/images/hero-cutout.png"
                   alt="Transparent Cutout"
                   className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)]"
                 />

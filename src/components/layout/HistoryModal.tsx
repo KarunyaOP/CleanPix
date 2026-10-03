@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useSession } from "@/components/providers/AuthProvider";
 
+import { useProjectsHistory } from "@/hooks/useProjectsHistory";
+
 interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,7 +30,6 @@ export interface HistoryItem {
   originalName: string;
   cutoutUrl: string;
   timestamp: string;
-  category: string;
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({
@@ -37,70 +38,34 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onSelectCutout,
 }) => {
   const { data: session } = useSession();
-  const userEmail = session?.user?.email || "";
-  const userId = session?.user?.id || "";
+  const { projects, isRefreshing, refreshHistory, deleteProject } = useProjectsHistory();
 
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  /**
-   * Re-fetch latest project records from API
-   */
-  const loadHistory = useCallback(async (isManualRefresh = false) => {
-    if (isManualRefresh) {
-      setIsRefreshing(true);
-    }
+  const historyItems: HistoryItem[] = projects.map((p) => ({
+    id: p.id,
+    originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
+    cutoutUrl: p.processedUrl || p.originalUrl,
+    timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  }));
 
+  const handleRefresh = async () => {
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      const res = await fetch(url, {
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.success && Array.isArray(data.projects)) {
-          const mapped: HistoryItem[] = data.projects.map((p: any) => ({
-            id: p.id,
-            originalName: p.originalUrl?.split("/").pop() || "cleanpix_cutout.png",
-            cutoutUrl: p.processedUrl || p.originalUrl,
-            timestamp: new Date(p.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            category: p.detectedObject ? p.detectedObject.charAt(0).toUpperCase() + p.detectedObject.slice(1) : "Cutout",
-          }));
-          setHistoryItems(mapped);
-          if (isManualRefresh) showToast("History refreshed.");
-          return;
-        }
-      }
-      setHistoryItems([]);
-    } catch (err) {
-      console.error("[LOAD_HISTORY_MODAL_ERROR]", err);
-      if (isManualRefresh) showToast("Failed to refresh history.");
-    } finally {
-      setIsRefreshing(false);
+      await refreshHistory();
+      showToast("History refreshed.");
+    } catch {
+      showToast("Failed to refresh history.");
     }
-  }, [userEmail, userId]);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadHistory(false);
-    }
-  }, [isOpen, loadHistory]);
+  };
 
   // ESC key listener
   useEffect(() => {
@@ -143,26 +108,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   const handleDeleteItem = async (id: string) => {
     try {
-      const userEmail = session?.user?.email || "";
-      const userId = session?.user?.id || "";
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
-
-      const res = await fetch(`/api/projects?${queryString}`, {
-        method: "DELETE",
-        headers: {
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || "Failed to delete cutout from database.");
-      }
-
-      setHistoryItems((prev) => prev.filter((item) => item.id !== id));
+      await deleteProject(id);
       showToast("Cutout deleted.");
     } catch (err: any) {
       console.error("[DELETE_ITEM_ERROR]", err);
@@ -218,7 +164,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             {/* REFRESH BUTTON IN HEADER */}
             <button
               type="button"
-              onClick={() => loadHistory(true)}
+              onClick={handleRefresh}
               disabled={isRefreshing}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-pill bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-xs font-semibold text-[#F8FAFC] hover:border-primary/40 transition-all cursor-pointer disabled:opacity-50"
               title="Re-fetch latest project records from the database"
@@ -263,14 +209,13 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                       <h4 className="text-xs font-bold text-white truncate">
                         {item.originalName}
                       </h4>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-pill bg-white/[0.06] text-[10px] font-medium text-text-secondary">
-                          {item.category || "Subject"}
-                        </span>
-                        <span className="text-[10px] text-text-muted flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-text-muted">
+                        <span className="flex items-center gap-1">
                           <Clock size={10} />
                           {item.timestamp}
                         </span>
+                        <span>•</span>
+                        <span className="text-accent font-semibold">PNG</span>
                       </div>
                     </div>
 

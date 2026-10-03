@@ -336,7 +336,7 @@ export const Hero: React.FC = () => {
               <div className="w-full max-w-[780px] flex flex-col gap-4">
                 <ProcessedPreviewCard
                   originalUrl="/images/hero-original.jpg"
-                  processedUrl="/images/hero-cutout.jpg"
+                  processedUrl="/images/hero-cutout.png"
                   isProcessing={false}
                   onCopyClipboard={async () => {}}
                   detectedCategory="person"

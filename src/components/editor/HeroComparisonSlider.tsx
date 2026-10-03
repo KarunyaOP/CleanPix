@@ -34,7 +34,7 @@ export const HeroComparisonSlider: React.FC<HeroComparisonSliderProps> = ({
   onPaddingChange,
 }) => {
   const original = customOriginalUrl || "/images/hero-original.jpg";
-  const cutout = customCutoutUrl || (customOriginalUrl ? null : "/images/hero-cutout.jpg");
+  const cutout = customCutoutUrl || (customOriginalUrl ? null : "/images/hero-cutout.png");
 
   return (
     <div className="w-full flex flex-col gap-4 select-none">

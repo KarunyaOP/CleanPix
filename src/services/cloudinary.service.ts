@@ -2,6 +2,7 @@ import { getCloudinaryClient, isCloudinaryConfigured } from "@/lib/cloudinary";
 import { UploadApiResponse } from "cloudinary";
 import { classifyImageSubject } from "@/utils/aiDetection";
 import { DetectedCategory } from "@/types/schema";
+import { SegmentationService } from "@/services/segmentation.service";
 
 export interface BackgroundRemovalResult {
   jobId: string;
@@ -100,9 +101,103 @@ export class CloudinaryService {
    * - Generates authenticated HMAC SHA-256 signed URLs (Standard cutout, HD cutout, Original asset)
    * - Polls transformation readiness
    */
+  /**
+   * Securely downloads an authenticated Cloudinary asset buffer on the server.
+   * Uses signed private download URLs with server-side basic authentication headers.
+   * Never exposes credentials or raw storage URLs to the client.
+   */
+  static async fetchAuthenticatedAssetBuffer(publicId: string, format: string = "png"): Promise<Buffer> {
+    const cloudinary = getCloudinaryClient();
+    const apiKey = cloudinary.config().api_key || process.env.CLOUDINARY_API_KEY || "";
+    const apiSecret = cloudinary.config().api_secret || process.env.CLOUDINARY_API_SECRET || "";
+
+    if (!apiKey || !apiSecret) {
+      throw new Error("Missing Cloudinary API key or secret for authenticated asset retrieval.");
+    }
+
+    const downloadUrl = cloudinary.utils.private_download_url(publicId, format, {
+      type: "authenticated",
+      resource_type: "image",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+    const authHeader = "Basic " + Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
+
+    const response = await fetch(downloadUrl, {
+      headers: {
+        Authorization: authHeader,
+      },
+    });
+
+    if (!response.ok) {
+      // Also attempt signed delivery URL with Basic Auth
+      const signedUrl = cloudinary.url(publicId, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        format: format,
+      });
+
+      const retryRes = await fetch(signedUrl, {
+        headers: {
+          Authorization: authHeader,
+        },
+      });
+
+      if (!retryRes.ok) {
+        throw new Error(`Failed to retrieve authenticated image asset (HTTP ${response.status} / ${retryRes.status})`);
+      }
+
+      return Buffer.from(await retryRes.arrayBuffer());
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  /**
+   * Processes a direct-uploaded Cloudinary asset:
+   * 1. Performs AI subject classification
+   * 2. Securely retrieves authenticated image buffer on server
+   * 3. Executes Universal Foreground Segmentation (SegmentationService)
+   * 4. Uploads clean lossless transparent PNG cutout to Cloudinary
+   * 5. Returns authenticated HMAC SHA-256 signed URLs
+   */
+  /**
+   * Helper to log processing metrics and indicators for every background removal job.
+   * Logs only to server console (not exposed to frontend / UI).
+   */
+  private static logProcessingSource(params: {
+    uploadId: string;
+    processingEngine: "universal_segmentation" | "cloudinary_fallback" | string;
+    retrievalMethod: "authenticated_cloudinary_download" | "direct_multipart_upload" | "fallback" | string;
+    processingTimeMs: number;
+    isFallback?: boolean;
+  }): void {
+    const { uploadId, processingEngine, retrievalMethod, processingTimeMs, isFallback } = params;
+    
+    if (isFallback || processingEngine === "cloudinary_fallback" || retrievalMethod === "fallback") {
+      console.warn(
+        `[BACKGROUND_REMOVAL_FALLBACK_WARN] Fallback occurred for job:\nupload_id=${uploadId}\nprocessing_engine=${processingEngine}\nretrieval_method=${retrievalMethod}\nprocessing_time_ms=${processingTimeMs}`
+      );
+    }
+
+    console.log(
+      `[BACKGROUND_REMOVAL_JOB] upload_id=${uploadId} processing_engine=${processingEngine} retrieval_method=${retrievalMethod} processing_time_ms=${processingTimeMs}\nprocessing_engine=${processingEngine}\nretrieval_method=${retrievalMethod}`
+    );
+  }
+
+  /**
+   * Processes a direct-uploaded Cloudinary asset:
+   * 1. Performs AI subject classification
+   * 2. Securely retrieves authenticated image buffer on server
+   * 3. Executes Universal Foreground Segmentation (SegmentationService)
+   * 4. Uploads clean lossless transparent PNG cutout to Cloudinary
+   * 5. Returns authenticated HMAC SHA-256 signed URLs
+   */
   static async processDirectUploadedImage(
     params: ProcessDirectUploadParams
   ): Promise<BackgroundRemovalResult> {
+    const startTime = Date.now();
     const {
       publicId,
       version,
@@ -118,6 +213,8 @@ export class CloudinaryService {
       jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       userId,
     } = params;
+
+    const uploadId = publicId || jobId;
 
     if (!publicId) {
       throw new Error("Missing publicId for Cloudinary background removal processing");
@@ -137,7 +234,7 @@ export class CloudinaryService {
     const cloudinary = getCloudinaryClient();
 
     try {
-      // 1. Classify subject using Cloudinary face detection + visual/metadata analysis + geometry
+      // 1. Classify subject for framing & metadata
       const detectedObject = classifyImageSubject({
         fileName,
         faces,
@@ -148,45 +245,11 @@ export class CloudinaryService {
         height,
       });
 
-      // Normalize framing choice
       const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
       const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
       const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
 
-      // 2. Construct genuine Standard Cloudinary AI Background Removal transformed URL with HMAC signature
-      // c_limit,w_2048,h_2048 guarantees the transparent PNG buffer never exceeds Cloudinary's 10MB (10,485,760 bytes) processing limit
-      const standardTransformation = isSpacious
-        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/cs_srgb,q_auto:best"
-        : isBalanced
-        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/cs_srgb,q_auto:best"
-        : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/cs_srgb,q_auto:best";
-
-      const processedUrl = cloudinary.url(publicId, {
-        type: "authenticated",
-        sign_url: true,
-        raw_transformation: standardTransformation,
-        format: "png",
-        secure: true,
-        version: version,
-      });
-
-      // 3. Construct HD Enhanced Cloudinary AI Background Removal transformed URL with HMAC signature
-      const hdTransformation = isSpacious
-        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5/e_unsharp_mask:120,cs_srgb,q_auto:best"
-        : isBalanced
-        ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25/e_unsharp_mask:120,cs_srgb,q_auto:best"
-        : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/e_unsharp_mask:120,cs_srgb,q_auto:best";
-
-      const hdUrl = cloudinary.url(publicId, {
-        type: "authenticated",
-        sign_url: true,
-        raw_transformation: hdTransformation,
-        format: "png",
-        secure: true,
-        version: version,
-      });
-
-      // 4. Construct signed original image URL with HMAC protection
+      // 2. Construct signed original image URL with HMAC protection
       const originalUrl = cloudinary.url(publicId, {
         type: "authenticated",
         sign_url: true,
@@ -195,31 +258,89 @@ export class CloudinaryService {
         format: format,
       });
 
-      // 5. Server-side quick polling to verify processing status of standard cutout
-      await this.verifyOrPollCloudinaryUrl(processedUrl, 10, 1500);
+      // 3. Securely retrieve authenticated original image bytes from Cloudinary
+      const rawImageBuffer = await this.fetchAuthenticatedAssetBuffer(publicId, format);
+
+      // 4. Primary Processing: Universal Foreground Segmentation
+      const transparentPngBuffer = await SegmentationService.removeBackground(rawImageBuffer);
+
+      if (!transparentPngBuffer || transparentPngBuffer.length === 0) {
+        throw new Error("Universal segmentation engine produced an empty image buffer.");
+      }
+
+      // 5. Store the transparent PNG in Cloudinary authenticated storage
+      const folder =
+        publicId.substring(0, publicId.lastIndexOf("/")) ||
+        (userId ? `cleanpix/users/${userId}` : `cleanpix/guest/${jobId}`);
+
+      const cutoutUpload = await new Promise<UploadApiResponse>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: `${folder}/cutouts`,
+            resource_type: "image",
+            type: "authenticated",
+            format: "png",
+          },
+          (err, res) => {
+            if (err || !res) return reject(err || new Error("Failed to store transparent cutout"));
+            resolve(res);
+          }
+        );
+        stream.end(transparentPngBuffer);
+      });
+
+      // 6. Generate signed authenticated URLs for transparent PNG and HD PNG
+      const processedUrl = cloudinary.url(cutoutUpload.public_id, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        format: "png",
+        version: cutoutUpload.version,
+      });
+
+      const hdUrl = cloudinary.url(cutoutUpload.public_id, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        format: "png",
+        raw_transformation: "e_unsharp_mask:120,cs_srgb,q_auto:best",
+        version: cutoutUpload.version,
+      });
+
+      // Log processing-source metrics
+      const processingTimeMs = Date.now() - startTime;
+      this.logProcessingSource({
+        uploadId,
+        processingEngine: "universal_segmentation",
+        retrievalMethod: "authenticated_cloudinary_download",
+        processingTimeMs,
+      });
 
       return {
         jobId,
         originalUrl,
         processedUrl,
         hdUrl,
-        publicId,
-        version,
+        publicId: cutoutUpload.public_id,
+        version: cutoutUpload.version,
         detectedObject,
-        width,
-        height,
+        width: cutoutUpload.width || width,
+        height: cutoutUpload.height || height,
         format: "png",
         provider: "cloudinary",
         framing: normalizedFraming,
       };
-    } catch (cloudinaryError: any) {
-      console.error("[CLOUDINARY_PROCESS_DIRECT_ERROR]", cloudinaryError);
-      throw cloudinaryError;
+    } catch (err: any) {
+      console.error("[PIPELINE_PROCESSING_ERROR]", err?.message || err);
+      const error: any = new Error(err?.message || "Failed to process image with universal background removal.");
+      error.code = "BACKGROUND_REMOVAL_FAILED";
+      error.details = "Image segmentation failed during processing.";
+      throw error;
     }
   }
 
   /**
-   * Upload an image to Cloudinary and execute real AI Background Removal (e_background_removal)
+   * Upload an image to Cloudinary and execute Universal AI Background Removal
    * with custom Framing composition (Fit 0%, Balanced 50%, Spacious 100%) - Fallback endpoint
    */
   static async removeBackground(
@@ -229,6 +350,7 @@ export class CloudinaryService {
     framing: "fit" | "balanced" | "spacious" | string = "fit",
     userId?: string
   ): Promise<BackgroundRemovalResult> {
+    const startTime = Date.now();
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     // 1. Verify Cloudinary credentials in server environment
@@ -247,7 +369,7 @@ export class CloudinaryService {
       // 2. Upload raw image to Cloudinary under authenticated delivery and user-scoped storage
       const uploadFolder = userId ? `cleanpix/users/${userId}` : `cleanpix/guest/${jobId}`;
 
-      const uploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
+      const rawUploadPromise = new Promise<UploadApiResponse>((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             folder: uploadFolder,
@@ -267,21 +389,96 @@ export class CloudinaryService {
         uploadStream.end(buffer);
       });
 
-      return await this.processDirectUploadedImage({
-        publicId: uploadResult.public_id,
-        version: uploadResult.version,
-        fileName,
-        width: uploadResult.width,
-        height: uploadResult.height,
+      // 3. Primary Processing: Universal Foreground Segmentation
+      const segmentationPromise = SegmentationService.removeBackground(buffer);
+
+      const [uploadResult, segmentedBuffer] = await Promise.all([rawUploadPromise, segmentationPromise]);
+
+      if (!segmentedBuffer || segmentedBuffer.length === 0) {
+        throw new Error("Universal segmentation engine produced an empty image buffer.");
+      }
+
+      // 4. Store transparent cutout in Cloudinary authenticated storage
+      const cutoutUploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
+        const cutoutStream = cloudinary.uploader.upload_stream(
+          {
+            folder: `${uploadFolder}/cutouts`,
+            resource_type: "image",
+            type: "authenticated",
+            format: "png",
+          },
+          (error, result) => {
+            if (error || !result) {
+              return reject(error || new Error("Cloudinary cutout upload failed"));
+            }
+            resolve(result);
+          }
+        );
+        cutoutStream.end(segmentedBuffer);
+      });
+
+      const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
+      const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
+      const normalizedFraming = isSpacious ? "spacious" : isBalanced ? "balanced" : "fit";
+
+      const processedUrl = cloudinary.url(cutoutUploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        format: "png",
+        version: cutoutUploadResult.version,
+      });
+
+      const hdUrl = cloudinary.url(cutoutUploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
+        format: "png",
+        raw_transformation: "e_unsharp_mask:120,cs_srgb,q_auto:best",
+        version: cutoutUploadResult.version,
+      });
+
+      const originalUrl = cloudinary.url(uploadResult.public_id, {
+        type: "authenticated",
+        sign_url: true,
+        secure: true,
         format: uploadResult.format,
+        version: uploadResult.version,
+      });
+
+      const detectedObject = classifyImageSubject({
+        fileName,
         faces: uploadResult.faces,
         tags: uploadResult.tags,
         colors: uploadResult.colors,
         illustrationScore: uploadResult.illustration_score,
-        framing,
-        jobId,
-        userId,
+        width: uploadResult.width,
+        height: uploadResult.height,
       });
+
+      // Log processing-source metrics
+      const processingTimeMs = Date.now() - startTime;
+      this.logProcessingSource({
+        uploadId: uploadResult.public_id || jobId,
+        processingEngine: "universal_segmentation",
+        retrievalMethod: "direct_multipart_upload",
+        processingTimeMs,
+      });
+
+      return {
+        jobId,
+        originalUrl,
+        processedUrl,
+        hdUrl,
+        publicId: cutoutUploadResult.public_id,
+        version: cutoutUploadResult.version,
+        detectedObject,
+        width: cutoutUploadResult.width || uploadResult.width,
+        height: cutoutUploadResult.height || uploadResult.height,
+        format: "png",
+        provider: "cloudinary",
+        framing: normalizedFraming,
+      };
     } catch (cloudinaryError: any) {
       console.error("[CLOUDINARY_API_ERROR]", cloudinaryError);
       
@@ -298,10 +495,10 @@ export class CloudinaryService {
       }
 
       const error: any = new Error(
-        cloudinaryError.message || "Failed to process image with Cloudinary AI background removal."
+        cloudinaryError.message || "Failed to process image with universal background removal."
       );
-      error.code = cloudinaryError.code || "CLOUDINARY_PROCESSING_ERROR";
-      error.details = cloudinaryError.details || cloudinaryError.message || "Cloudinary API returned an error.";
+      error.code = cloudinaryError.code || "BACKGROUND_REMOVAL_FAILED";
+      error.details = cloudinaryError.details || cloudinaryError.message || "Universal background removal encountered an error.";
       throw error;
     }
   }
@@ -309,20 +506,29 @@ export class CloudinaryService {
   /**
    * Helper to generate HD URL dynamically from publicId & version with authenticated signature
    */
-  static generateHdUrl(publicId: string, version?: number, framing: string = "fit"): string {
+  static generateHdUrl(
+    publicId: string,
+    version?: number,
+    framing: string = "fit",
+    detectedCategory: string = "other"
+  ): string {
     const cloudinary = getCloudinaryClient();
     const isSpacious = framing === "spacious" || framing === "100" || framing === "100%";
     const isBalanced = framing === "balanced" || framing === "50" || framing === "50%";
     const padPrefix = isSpacious
-      ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.5,h_1.5"
+      ? "b_transparent,c_pad,w_1.5,h_1.5"
       : isBalanced
-      ? "c_limit,w_2048,h_2048/e_background_removal:fineedges_y/b_transparent,c_pad,w_1.25,h_1.25"
-      : "c_limit,w_2048,h_2048/e_background_removal:fineedges_y";
+      ? "b_transparent,c_pad,w_1.25,h_1.25"
+      : "";
+
+    const rawTransformation = padPrefix
+      ? `${padPrefix}/e_unsharp_mask:120,cs_srgb,q_auto:best`
+      : "e_unsharp_mask:120,cs_srgb,q_auto:best";
 
     return cloudinary.url(publicId, {
       type: "authenticated",
       sign_url: true,
-      raw_transformation: `${padPrefix}/e_unsharp_mask:120,cs_srgb,q_auto:best`,
+      raw_transformation: rawTransformation,
       format: "png",
       secure: true,
       version: version,

@@ -30,7 +30,7 @@ export const LandingDetectedPanel: React.FC<LandingDetectedPanelProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-[11px] sm:text-xs font-semibold text-text-secondary flex items-center gap-1.5">
             <Layers size={12} className="text-accent" />
-            <span>Smart Background Recommendations:</span>
+            <span>Background Presets:</span>
           </span>
         </div>
 

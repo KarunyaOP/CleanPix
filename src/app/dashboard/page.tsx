@@ -7,7 +7,7 @@ import { DashboardClient, DashboardProject } from "@/components/dashboard/Dashbo
 import { Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, isPlanVerified } = useSession() as any;
   const router = useRouter();
 
   useEffect(() => {
@@ -16,7 +16,11 @@ export default function DashboardPage() {
     }
   }, [status, router]);
 
-  if (status === "loading") {
+  const isResolving =
+    status === "loading" ||
+    (Boolean(session?.user) && !isPlanVerified && !(session?.user as any)?.plan);
+
+  if (isResolving) {
     return (
       <div className="min-h-screen bg-[#0A0B1E] flex flex-col items-center justify-center gap-3">
         <Loader2 size={36} className="animate-spin text-accent" />

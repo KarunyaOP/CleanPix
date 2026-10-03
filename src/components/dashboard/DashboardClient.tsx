@@ -30,6 +30,8 @@ import {
 import { SettingsModal } from "@/components/dashboard/SettingsModal";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
 
+import { useProjectsHistory } from "@/hooks/useProjectsHistory";
+
 export interface DashboardProject {
   id: string;
   originalUrl: string;
@@ -55,28 +57,30 @@ export interface DashboardClientProps {
     authProvider?: string;
     createdAt?: string;
   };
-  initialStats: {
+  initialStats?: {
     totalProjects: number;
     totalProcessed: number;
     creditsRemaining: number;
   };
-  initialRecentProjects: DashboardProject[];
+  initialRecentProjects?: DashboardProject[];
 }
 
 export const DashboardClient: React.FC<DashboardClientProps> = ({
   user,
-  initialStats,
-  initialRecentProjects,
 }) => {
   const router = useRouter();
   const { data: session } = useSession();
-  const userEmail = session?.user?.email || user.email || "";
-  const userId = session?.user?.id || user.id || "";
+  const {
+    projects,
+    stats: historyStats,
+    isRefreshing,
+    refreshHistory,
+    deleteProject,
+  } = useProjectsHistory();
 
-  const [stats, setStats] = useState(initialStats);
-  const [recentProjects, setRecentProjects] = useState<DashboardProject[]>(initialRecentProjects);
-  const [userPlan, setUserPlan] = useState<string>(user.plan || "free");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [liveCredits, setLiveCredits] = useState<number | null>(null);
+  const [livePlan, setLivePlan] = useState<string | null>(null);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [upgradeModalPlan, setUpgradeModalPlan] = useState<"pro" | "business">("pro");
@@ -107,80 +111,49 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
   useEffect(() => {
     if (session?.user) {
       if ((session.user as any).plan) {
-        setUserPlan((session.user as any).plan);
+        setLivePlan((session.user as any).plan);
       }
       if (typeof (session.user as any).credits === "number") {
-        setStats((prev) => ({
-          ...prev,
-          creditsRemaining: (session.user as any).credits,
-        }));
+        setLiveCredits((session.user as any).credits);
       }
     } else if (user.plan) {
-      setUserPlan(user.plan);
+      setLivePlan(user.plan);
     }
-  }, [session?.user, user.plan]);
+  }, [session?.user, user.plan, user.credits]);
 
-  /**
-   * Fetch fresh stats & projects from database
-   */
-  const fetchFreshData = useCallback(async () => {
-    console.log("Fetching projects");
-    try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      const res = await fetch(url, {
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.success && Array.isArray(data.projects)) {
-          const projects = data.projects;
-          console.log("Projects fetched", projects);
-          const completedCount = projects.filter(
-            (p: any) => p.status === "done" || Boolean(p.processedUrl)
-          ).length;
-
-          setRecentProjects(projects.slice(0, 5));
-          setStats((prev) => ({
-            ...prev,
-            totalProjects: projects.length,
-            totalProcessed: completedCount,
-          }));
-          return;
-        }
-      }
-      console.log("Projects fetched", []);
-    } catch (err) {
-      console.error("Projects fetch failed", err);
-    }
-  }, [userEmail, userId]);
-
-  // Initial mount fetch
   useEffect(() => {
-    fetchFreshData();
-  }, [fetchFreshData]);
+    const handleCreditsUpdated = (e: any) => {
+      if (typeof e.detail?.credits === "number") {
+        setLiveCredits(e.detail.credits);
+      }
+    };
+    const handlePlanUpdated = (e: any) => {
+      if (e.detail?.plan) {
+        setLivePlan(e.detail.plan);
+      }
+    };
+    window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    return () => {
+      window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+      window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    };
+  }, []);
+
+  const effectivePlan = livePlan || (session?.user as any)?.plan || user.plan || "free";
+  const effectiveCredits = liveCredits ?? (session?.user as any)?.credits ?? user.credits ?? 0;
+  const recentProjects = projects.slice(0, 5);
 
   /**
    * Re-fetch live stats and recent activity directly from database
    */
   const handleRefresh = async () => {
-    setIsRefreshing(true);
     try {
-      await fetchFreshData();
+      await refreshHistory();
       showToast("Dashboard refreshed.");
     } catch (err) {
       console.error("[DASHBOARD_REFRESH_ERROR]", err);
       showToast("Could not refresh dashboard.");
-    } finally {
-      setIsRefreshing(false);
     }
   };
 
@@ -189,27 +162,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
    */
   const handleDeleteProject = async (id: string) => {
     setDeleteLoadingId(id);
-
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
-
-      const res = await fetch(`/api/projects?${queryString}`, {
-        method: "DELETE",
-        headers: {
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || "Failed to delete project from database.");
-      }
-
-      setRecentProjects((prev) => prev.filter((p) => p.id !== id));
-      await fetchFreshData();
+      await deleteProject(id);
       showToast("Project deleted from database.");
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
@@ -266,8 +220,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
     }
   };
 
-  const isBusinessPlan = ["business", "enterprise"].includes(userPlan.toLowerCase());
-  const isProPlan = userPlan.toLowerCase() === "pro";
+  const isBusinessPlan = ["business", "enterprise"].includes(effectivePlan.toLowerCase());
+  const isProPlan = effectivePlan.toLowerCase() === "pro";
   const isFreePlan = !isBusinessPlan && !isProPlan;
 
   return (
@@ -288,8 +242,8 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
           name: user.name,
           email: user.email,
           image: user.image,
-          credits: stats.creditsRemaining,
-          plan: userPlan,
+          credits: effectiveCredits,
+          plan: effectivePlan,
           authProvider: user.authProvider,
         }}
       />
@@ -458,7 +412,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
             <div className="min-w-0">
               <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
-                {stats.totalProjects}
+                {historyStats.totalProjects}
               </div>
               <p className="text-xs text-text-muted mt-1 truncate">
                 Saved in your workspace
@@ -479,7 +433,7 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
 
             <div className="min-w-0">
               <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
-                {stats.totalProcessed}
+                {historyStats.totalProcessed}
               </div>
               <p className="text-xs text-text-muted mt-1 truncate">
                 AI background removals &amp; exports
@@ -501,12 +455,12 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
             <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
               <div className="min-w-0">
                 <div className="font-heading font-bold text-3xl sm:text-4xl text-white">
-                  {["pro", "business", "enterprise"].includes(userPlan.toLowerCase())
+                  {["pro", "business", "enterprise"].includes(effectivePlan.toLowerCase())
                     ? "Unlimited"
-                    : stats.creditsRemaining}
+                    : effectiveCredits}
                 </div>
                 <p className="text-xs text-text-muted mt-1">
-                  {["pro", "business", "enterprise"].includes(userPlan.toLowerCase())
+                  {["pro", "business", "enterprise"].includes(effectivePlan.toLowerCase())
                     ? "Unlimited AI background processing"
                     : "Upgrade for unlimited processing"}
                 </p>
@@ -655,18 +609,17 @@ export const DashboardClient: React.FC<DashboardClientProps> = ({
                     </div>
 
                     <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs">
-                          {project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`}
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-[10px] font-semibold text-accent uppercase">
-                          {project.detectedObject || "Cutout"}
+                      <h4 className="font-heading font-semibold text-sm text-white truncate max-w-[180px] xs:max-w-[240px] sm:max-w-sm">
+                        {project.originalUrl?.split("/").pop() || `Project_${project.id.slice(0, 6)}`}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-text-muted">
+                        <span className="flex items-center gap-1">
+                          <Clock size={11} />
+                          {formatRelativeTime(project.createdAt)}
                         </span>
+                        <span>•</span>
+                        <span className="text-accent font-semibold">PNG</span>
                       </div>
-                      <span className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
-                        <Clock size={11} />
-                        {formatRelativeTime(project.createdAt)}
-                      </span>
                     </div>
                   </div>
 

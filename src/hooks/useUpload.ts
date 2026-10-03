@@ -512,7 +512,25 @@ export function useUpload() {
       setProcessedUrl(successData.processedUrl);
       setUploadProgress(100);
 
-      // 6. Update credits across UI
+      // 6. Synchronize history across Dashboard & History in real-time
+      if (typeof window !== "undefined" && successData.processedUrl) {
+        window.dispatchEvent(
+          new CustomEvent("cleanpix_project_created", {
+            detail: {
+              project: {
+                id: (successData as any).projectId || successData.jobId,
+                originalUrl: successData.originalUrl || uploadFile.name,
+                processedUrl: successData.processedUrl,
+                detectedObject: successData.detectedObject,
+                status: "done",
+                createdAt: new Date().toISOString(),
+              },
+            },
+          })
+        );
+      }
+
+      // 7. Update credits across UI
       if (typeof successData.creditsRemaining === "number") {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -590,7 +608,7 @@ export function useUpload() {
    * Copy transparent PNG directly to clipboard using Clipboard API
    */
   const copyToClipboard = useCallback(async (customUrl?: string) => {
-    const targetUrl = customUrl || (isHdReady && hdUrl ? hdUrl : (processedUrl || "/images/hero-cutout.jpg"));
+    const targetUrl = customUrl || (isHdReady && hdUrl ? hdUrl : (processedUrl || "/images/hero-cutout.png"));
     if (!targetUrl) {
       showToast("No transparent PNG available to copy.", "error");
       return;

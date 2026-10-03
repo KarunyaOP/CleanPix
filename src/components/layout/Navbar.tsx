@@ -19,7 +19,7 @@ import { SettingsModal } from "@/components/dashboard/SettingsModal";
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
+  const { data: session, status, isPlanVerified } = useSession() as any;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeLink, setActiveLink] = useState("Home");
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -28,8 +28,12 @@ export const Navbar: React.FC = () => {
   const [liveCredits, setLiveCredits] = useState<number | null>(null);
   const [livePlan, setLivePlan] = useState<string | null>(null);
 
-  const currentPlan = livePlan || (session?.user as any)?.plan || "free";
+  const rawPlan = livePlan || (session?.user as any)?.plan;
+  const currentPlan = rawPlan || "free";
   const currentCredits = liveCredits ?? (session?.user as any)?.credits ?? 0;
+  const isAuthLoading =
+    status === "loading" ||
+    (Boolean(session?.user) && !isPlanVerified && !livePlan && !(session?.user as any)?.plan);
 
   // Helper to reliably unlock page scrolling
   const unlockBodyScroll = useCallback(() => {
@@ -234,7 +238,7 @@ export const Navbar: React.FC = () => {
 
           {/* Right Actions - Desktop */}
           <div className="hidden md:flex items-center gap-2.5">
-            {status === "loading" ? (
+            {isAuthLoading ? (
               /* Auth Loading Skeleton Pill */
               <div
                 className="flex items-center gap-2 pl-1.5 pr-3 h-[48px] rounded-pill bg-[#131A3A]/70 border border-primary/20 animate-pulse select-none shrink-0"
@@ -316,18 +320,15 @@ export const Navbar: React.FC = () => {
                       <span>Dashboard</span>
                     </Link>
 
-                    {/* 2. History */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserDropdownOpen(false);
-                        setIsHistoryModalOpen(true);
-                      }}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-[12px] text-xs font-semibold text-text-primary hover:text-white hover:bg-white/10 transition-colors cursor-pointer text-left"
+                    {/* 2. History (Unified navigation to /history) */}
+                    <Link
+                      href="/history"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-[12px] text-xs font-semibold text-text-primary hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                     >
                       <History size={14} className="text-accent" />
                       <span>History</span>
-                    </button>
+                    </Link>
 
                     {/* 3. Settings */}
                     <button
@@ -413,7 +414,7 @@ export const Navbar: React.FC = () => {
               </nav>
 
               <div className="pt-4 border-t border-white/[0.1] flex flex-col gap-3">
-                {status === "loading" ? (
+                {isAuthLoading ? (
                   /* Mobile Auth Loading Skeleton */
                   <div className="p-3 rounded-[12px] bg-[#131A3A]/70 border border-white/10 animate-pulse flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -458,18 +459,15 @@ export const Navbar: React.FC = () => {
                       <span>Dashboard</span>
                     </Link>
 
-                    {/* 2. History (Mobile) */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeMobileMenu();
-                        setIsHistoryModalOpen(true);
-                      }}
+                    {/* 2. History (Mobile - Unified navigation to /history) */}
+                    <Link
+                      href="/history"
+                      onClick={closeMobileMenu}
                       className="w-full py-2.5 px-3 rounded-btn text-xs font-semibold text-white bg-[#131A3A] border border-white/15 flex items-center gap-2 cursor-pointer"
                     >
                       <History size={14} className="text-accent" />
                       <span>History</span>
-                    </button>
+                    </Link>
 
                     {/* 3. Settings (Mobile) */}
                     <button

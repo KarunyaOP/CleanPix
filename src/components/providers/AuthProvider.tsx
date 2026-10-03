@@ -12,6 +12,7 @@ export interface CleanPixUser {
   credits: number;
   plan: string;
   authProvider?: string;
+  isPlanVerified?: boolean;
 }
 
 export interface AuthContextType {
@@ -19,16 +20,72 @@ export interface AuthContextType {
   session: Session | null;
   status: "loading" | "authenticated" | "unauthenticated";
   isLoading: boolean;
+  isPlanVerified: boolean;
   signInWithOtp: (email: string, redirectTo?: string) => Promise<{ error: any; data: any }>;
   signOut: (options?: { callbackUrl?: string }) => Promise<void>;
   update: (data?: any) => Promise<void>;
 }
+
+const CACHE_KEY_PREFIX = "cleanpix_cached_user_profile_";
+
+const getCachedProfile = (emailOrId?: string | null): CleanPixUser | null => {
+  if (typeof window === "undefined" || !emailOrId) return null;
+  try {
+    const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${emailOrId.toLowerCase().trim()}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.email && typeof parsed.plan === "string" && parsed.plan.length > 0) {
+      return {
+        ...parsed,
+        isPlanVerified: true,
+      };
+    }
+  } catch {}
+  return null;
+};
+
+const saveCachedProfile = (profile: CleanPixUser) => {
+  if (typeof window === "undefined" || !profile) return;
+  try {
+    if (profile.email) {
+      localStorage.setItem(
+        `${CACHE_KEY_PREFIX}${profile.email.toLowerCase().trim()}`,
+        JSON.stringify({ ...profile, isPlanVerified: true })
+      );
+    }
+    if (profile.id) {
+      localStorage.setItem(
+        `${CACHE_KEY_PREFIX}${profile.id.trim()}`,
+        JSON.stringify({ ...profile, isPlanVerified: true })
+      );
+    }
+  } catch {}
+};
+
+const clearCachedProfile = (emailOrId?: string | null) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (emailOrId) {
+      localStorage.removeItem(`${CACHE_KEY_PREFIX}${emailOrId.toLowerCase().trim()}`);
+    }
+    // Remove cached profiles on logout
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(CACHE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {}
+};
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   status: "loading",
   isLoading: true,
+  isPlanVerified: false,
   signInWithOtp: async () => ({ error: new Error("AuthProvider not mounted"), data: null }),
   signOut: async () => {},
   update: async () => {},
@@ -50,14 +107,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const lastSyncEmailRef = useRef<string | null>(null);
 
   const buildOptimisticUser = useCallback((sbUser: SupabaseUser): CleanPixUser => {
+    // 1. Check local cache first for instant hydration of verified plan
+    const cached = getCachedProfile(sbUser.email) || getCachedProfile(sbUser.id);
+    if (cached) {
+      return {
+        ...cached,
+        id: sbUser.id || cached.id,
+        email: sbUser.email || cached.email,
+        name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || cached.name,
+        image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || cached.image,
+        isPlanVerified: true,
+      };
+    }
+
+    // 2. Check metadata
+    const metaPlan = sbUser.user_metadata?.plan;
+    const hasExplicitPlan = typeof metaPlan === "string" && metaPlan.length > 0;
+
     return {
       id: sbUser.id,
       email: sbUser.email!,
       name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || null,
       image: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture || null,
-      credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : 10,
-      plan: sbUser.user_metadata?.plan || "free",
+      credits: typeof sbUser.user_metadata?.credits === "number" ? sbUser.user_metadata.credits : (hasExplicitPlan ? 999999 : 0),
+      plan: hasExplicitPlan ? metaPlan : "",
       authProvider: sbUser.app_metadata?.provider || "email",
+      isPlanVerified: hasExplicitPlan,
     };
   }, []);
 
@@ -107,10 +182,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   credits: typeof data.user.credits === "number" ? data.user.credits : 10,
                   plan: data.user.plan || "free",
                   authProvider: data.user.authProvider || sbUser.app_metadata?.provider || "email",
+                  isPlanVerified: true,
                 };
                 lastSyncTimestampRef.current = Date.now();
                 lastSyncEmailRef.current = emailNorm;
+                saveCachedProfile(profileUser);
                 setUser(profileUser);
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("cleanpix_plan_updated", {
+                      detail: { plan: profileUser.plan },
+                    })
+                  );
+                  window.dispatchEvent(
+                    new CustomEvent("cleanpix_credits_updated", {
+                      detail: { credits: profileUser.credits },
+                    })
+                  );
+                }
                 return profileUser;
               }
             }
@@ -151,7 +240,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(initialSession);
         const hydratedUser = buildOptimisticUser(initialSession.user);
         setUser(hydratedUser);
-        // Instantly mark status as authenticated so dashboard and pages load immediately (<50ms)
         setStatus("authenticated");
         // Reconcile database profile in background
         syncUserProfile(initialSession.user, initialSession.access_token);
@@ -170,6 +258,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!isMounted) return;
 
       if (event === "SIGNED_OUT" || !currentSession?.user) {
+        clearCachedProfile(lastSyncEmailRef.current);
         lastSyncEmailRef.current = null;
         lastSyncTimestampRef.current = 0;
         setSession(null);
@@ -200,7 +289,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (typeof e.detail?.credits === "number") {
         setUser((prev) => {
           if (!prev) return null;
-          return { ...prev, credits: e.detail.credits };
+          const updated = { ...prev, credits: e.detail.credits };
+          saveCachedProfile(updated);
+          return updated;
         });
       }
     };
@@ -208,7 +299,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (e.detail?.plan) {
         setUser((prev) => {
           if (!prev) return null;
-          return { ...prev, plan: e.detail.plan };
+          const updated = { ...prev, plan: e.detail.plan, isPlanVerified: true };
+          saveCachedProfile(updated);
+          return updated;
         });
       }
     };
@@ -249,6 +342,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = useCallback(async (options?: { callbackUrl?: string }) => {
     try {
       console.log("[SUPABASE_SIGNOUT_START]");
+      clearCachedProfile(lastSyncEmailRef.current);
       lastSyncEmailRef.current = null;
       lastSyncTimestampRef.current = 0;
       await supabase.auth.signOut();
@@ -268,18 +362,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newData?.credits !== undefined) {
         setUser((prev) => {
           if (!prev) return null;
-          return { ...prev, credits: newData.credits };
+          const updated = { ...prev, credits: newData.credits };
+          saveCachedProfile(updated);
+          return updated;
         });
       }
       if (newData?.plan !== undefined) {
         setUser((prev) => {
           if (!prev) return null;
-          return { ...prev, plan: newData.plan };
+          const updated = { ...prev, plan: newData.plan, isPlanVerified: true };
+          saveCachedProfile(updated);
+          return updated;
         });
       }
       await syncUserProfile(session.user, session.access_token, true);
     }
   }, [session, syncUserProfile]);
+
+  const isPlanVerified = Boolean(user?.isPlanVerified || (user?.plan && user.plan.length > 0));
 
   const contextValue = useMemo(
     () => ({
@@ -287,11 +387,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       session,
       status,
       isLoading: status === "loading",
+      isPlanVerified,
       signInWithOtp,
       signOut,
       update,
     }),
-    [user, session, status, signInWithOtp, signOut, update]
+    [user, session, status, isPlanVerified, signInWithOtp, signOut, update]
   );
 
   return (
@@ -307,7 +408,7 @@ export const useAuth = () => useContext(AuthContext);
  * NextAuth compatibility hook so existing components continue to work seamlessly.
  */
 export const useSession = () => {
-  const { user, session, status, update } = useContext(AuthContext);
+  const { user, session, status, isPlanVerified, update } = useContext(AuthContext);
 
   const isReady = status === "authenticated" && Boolean(user);
 
@@ -320,13 +421,15 @@ export const useSession = () => {
           }
         : null,
       status: isReady ? "authenticated" : status === "unauthenticated" ? "unauthenticated" : "loading",
+      isPlanVerified: Boolean(isReady && (user?.isPlanVerified || isPlanVerified || (user?.plan && user.plan.length > 0))),
       update,
     }),
-    [isReady, user, session?.expires_at, status, update]
+    [isReady, user, session?.expires_at, status, isPlanVerified, update]
   );
 };
 
 export const signOut = async (options?: { callbackUrl?: string }) => {
+  clearCachedProfile();
   await supabase.auth.signOut();
   if (typeof window !== "undefined") {
     window.location.href = options?.callbackUrl || "/";

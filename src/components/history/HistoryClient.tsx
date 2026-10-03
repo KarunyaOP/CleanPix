@@ -40,8 +40,10 @@ export interface ProjectRecord {
   }>;
 }
 
+import { useProjectsHistory } from "@/hooks/useProjectsHistory";
+
 export interface HistoryClientProps {
-  initialProjects: ProjectRecord[];
+  initialProjects?: ProjectRecord[];
   initialUser?: {
     name?: string | null;
     email?: string | null;
@@ -51,19 +53,21 @@ export interface HistoryClientProps {
 }
 
 export const HistoryClient: React.FC<HistoryClientProps> = ({
-  initialProjects,
   initialUser,
 }) => {
   const router = useRouter();
   const { data: session } = useSession();
-  const userEmail = session?.user?.email || initialUser?.email || "";
-  const userId = session?.user?.id || (initialUser as any)?.id || "";
+  const {
+    projects,
+    isRefreshing,
+    refreshHistory,
+    deleteProject,
+    deleteAllProjects,
+  } = useProjectsHistory();
 
-  const [projects, setProjects] = useState<ProjectRecord[]>(initialProjects);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [itemsPerPage, setItemsPerPage] = useState<number>(12);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState<boolean>(false);
@@ -100,58 +104,38 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     }
   }, [session?.user, initialUser]);
 
-  /**
-   * Fetch fresh history records directly from API
-   */
-  const fetchFreshHistory = useCallback(async () => {
-    console.log("Fetching projects");
-    try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [emailQuery, idQuery].filter(Boolean).join("&");
-      const url = `/api/projects${queryString ? `?${queryString}` : ""}`;
-
-      const res = await fetch(url, {
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.success && Array.isArray(data.projects)) {
-          console.log("Projects fetched", data.projects);
-          setProjects(data.projects);
-          return;
-        }
-      }
-      console.log("Projects fetched", []);
-      setProjects([]);
-    } catch (err) {
-      console.error("Projects fetch failed", err);
-    }
-  }, [userEmail, userId]);
-
-  // Initial mount live fetch
   useEffect(() => {
-    fetchFreshHistory();
-  }, [fetchFreshHistory]);
+    const handleCreditsUpdated = (e: any) => {
+      if (typeof e.detail?.credits === "number") {
+        setLiveCredits(e.detail.credits);
+      }
+    };
+    const handlePlanUpdated = (e: any) => {
+      if (e.detail?.plan) {
+        setLivePlan(e.detail.plan);
+      }
+    };
+    window.addEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+    window.addEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    return () => {
+      window.removeEventListener("cleanpix_credits_updated", handleCreditsUpdated);
+      window.removeEventListener("cleanpix_plan_updated", handlePlanUpdated);
+    };
+  }, []);
+
+  const effectivePlan = livePlan || (session?.user as any)?.plan || initialUser?.plan || "free";
+  const effectiveCredits = liveCredits ?? (session?.user as any)?.credits ?? initialUser?.credits ?? 0;
 
   /**
    * Manual Re-fetch from API
    */
   const handleRefresh = async () => {
-    setIsRefreshing(true);
     try {
-      await fetchFreshHistory();
+      await refreshHistory();
       showToast("History refreshed.");
     } catch (err) {
       console.error("[REFRESH_ERROR]", err);
       showToast("Could not refresh history.");
-    } finally {
-      setIsRefreshing(false);
     }
   };
 
@@ -160,26 +144,8 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
    */
   const handleDelete = async (id: string) => {
     setDeleteLoadingId(id);
-
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = [`id=${encodeURIComponent(id)}`, emailQuery, idQuery].filter(Boolean).join("&");
-      const res = await fetch(`/api/projects?${queryString}`, {
-        method: "DELETE",
-        headers: {
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || "Failed to delete cutout from database.");
-      }
-
-      setProjects((prev) => prev.filter((p) => p.id !== id));
-      await fetchFreshHistory();
+      await deleteProject(id);
       showToast("Cutout deleted from database.");
     } catch (err: any) {
       console.error("[DELETE_ERROR]", err);
@@ -194,26 +160,8 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
    */
   const handleDeleteAll = async () => {
     setIsDeletingAll(true);
-
     try {
-      const emailQuery = userEmail ? `userEmail=${encodeURIComponent(userEmail)}` : "";
-      const idQuery = userId ? `userId=${encodeURIComponent(userId)}` : "";
-      const queryString = ["all=true", emailQuery, idQuery].filter(Boolean).join("&");
-      const res = await fetch(`/api/projects?${queryString}`, {
-        method: "DELETE",
-        headers: {
-          ...(userEmail ? { "x-user-email": userEmail } : {}),
-          ...(userId ? { "x-user-id": userId } : {}),
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || "Failed to delete all history from database.");
-      }
-
-      setProjects([]);
-      await fetchFreshHistory();
+      await deleteAllProjects();
       showToast("All processing history deleted permanently.");
     } catch (err: any) {
       console.error("[DELETE_ALL_ERROR]", err);
@@ -282,8 +230,7 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
     return projects.filter((project) => {
       const originalName = project.originalUrl?.split("/").pop()?.toLowerCase() || "";
       const id = project.id.toLowerCase();
-      const cat = (project.detectedObject || "").toLowerCase();
-      return originalName.includes(query) || id.includes(query) || cat.includes(query);
+      return originalName.includes(query) || id.includes(query);
     });
   }, [projects, searchQuery]);
 
@@ -438,18 +385,18 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
             {(session?.user || initialUser) && (
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-[#131A3A] border border-primary/30 shrink-0">
                 <span className="text-xs font-semibold text-white truncate max-w-[120px]">
-                  {userName}
+                  {session?.user?.name || initialUser?.name || session?.user?.email?.split("@")[0] || "Account"}
                 </span>
                 <span className={`px-2 py-0.5 rounded-pill border text-[10px] font-bold ${
-                  userPlan.toLowerCase() === "pro"
+                  effectivePlan.toLowerCase() === "pro"
                     ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
-                    : userPlan.toLowerCase() === "business"
+                    : effectivePlan.toLowerCase() === "business" || effectivePlan.toLowerCase() === "enterprise"
                     ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
                     : "bg-primary/25 border-primary/40 text-accent"
                 }`}>
-                  {userPlan.toLowerCase() === "pro"
+                  {effectivePlan.toLowerCase() === "pro"
                     ? "Pro"
-                    : userPlan.toLowerCase() === "business"
+                    : effectivePlan.toLowerCase() === "business" || effectivePlan.toLowerCase() === "enterprise"
                     ? "Business"
                     : "Free"}
                 </span>
@@ -563,11 +510,6 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
                           decoding="async"
                           className="w-full h-full object-cover rounded-[12px] filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-200"
                         />
-
-                        {/* Category Pill Tag */}
-                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-pill bg-[#0A0B1E]/90 backdrop-blur-md border border-white/15 text-[9px] font-bold text-accent uppercase tracking-wider">
-                          {project.detectedObject || "Cutout"}
-                        </span>
                       </div>
 
                       {/* File Details */}
@@ -578,10 +520,14 @@ export const HistoryClient: React.FC<HistoryClientProps> = ({
                         >
                           {filename}
                         </h4>
-                        <span className="text-[10.5px] text-text-muted mt-0.5 flex items-center gap-1 font-mono">
-                          <Clock size={10} />
-                          {formatTime(project.createdAt)}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap justify-center text-[10.5px] font-mono text-text-muted">
+                          <span className="flex items-center gap-1">
+                            <Clock size={10} />
+                            {formatTime(project.createdAt)}
+                          </span>
+                          <span>•</span>
+                          <span className="text-accent font-semibold">PNG</span>
+                        </div>
                       </div>
                     </div>
 

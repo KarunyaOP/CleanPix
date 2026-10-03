@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Sparkles, User, ShoppingBag, Dog, Car, Utensils, FileText, Shield, Monitor, Palette } from "lucide-react";
+import { Palette } from "lucide-react";
 import { DetectedCategory, SmartBackgroundPreset } from "@/types/schema";
 import { getRecommendedPresets } from "@/utils/backgroundPresets";
 
@@ -20,49 +20,14 @@ export const SmartBackgroundSelector: React.FC<SmartBackgroundSelectorProps> = (
 }) => {
   const presets = getRecommendedPresets(detectedCategory);
 
-  const getCategoryIcon = (cat?: DetectedCategory | null) => {
-    switch (cat) {
-      case "person":
-        return <User size={13} className="text-accent" />;
-      case "product":
-        return <ShoppingBag size={13} className="text-accent" />;
-      case "pet":
-        return <Dog size={13} className="text-accent" />;
-      case "vehicle":
-        return <Car size={13} className="text-accent" />;
-      case "food":
-        return <Utensils size={13} className="text-accent" />;
-      case "document":
-        return <FileText size={13} className="text-accent" />;
-      case "logo":
-        return <Shield size={13} className="text-accent" />;
-      case "screenshot":
-        return <Monitor size={13} className="text-accent" />;
-      case "illustration":
-        return <Palette size={13} className="text-accent" />;
-      default:
-        return <Sparkles size={13} className="text-accent" />;
-    }
-  };
-
-  const formatCategoryName = (cat?: DetectedCategory | null) => {
-    if (!cat) return "Object";
-    return cat.charAt(0).toUpperCase() + cat.slice(1);
-  };
-
   return (
     <div className={`w-full flex flex-col gap-2 ${className}`}>
-      {/* Category Header */}
+      {/* Background Presets Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-pill bg-[#131A3A] border border-primary/30 text-xs font-semibold text-text-secondary">
-          {getCategoryIcon(detectedCategory)}
-          <span>
-            Detected: <strong className="text-white">{formatCategoryName(detectedCategory)}</strong>
-          </span>
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+          <Palette size={13} className="text-accent" />
+          <span>Background Presets</span>
         </div>
-        <span className="text-[11px] text-text-muted font-medium">
-          Smart Recommendations
-        </span>
       </div>
 
       {/* Preset Chips */}
