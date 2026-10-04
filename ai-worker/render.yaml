@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: cleanpix-ai-worker
+    runtime: docker
+    dockerfilePath: ai-worker/Dockerfile
+    dockerContext: ai-worker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: AI_WORKER_SECRET
+        sync: false
