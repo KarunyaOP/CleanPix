@@ -207,22 +207,35 @@ export async function optimizeImageForUpload(file: File): Promise<File> {
               return resolve(optimizedFile);
             }
 
-            // If PNG is still >10MB, export as high-quality JPEG (0.95)
-            canvas.toBlob(
-              (jpgBlob) => {
-                if (jpgBlob) {
-                  const newName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
-                  const optimizedFile = new File([jpgBlob], newName, {
-                    type: "image/jpeg",
-                    lastModified: Date.now(),
-                  });
-                  return resolve(optimizedFile);
-                }
-                return resolve(file);
-              },
-              "image/jpeg",
-              0.95
-            );
+            // If PNG is still >10MB, downscale canvas further and export as PNG to strictly preserve RGBA transparency
+            // Never convert a PNG to JPEG because JPEG strips transparency and renders transparent pixels as solid black
+            const subScale = 0.75;
+            const subW = Math.max(1, Math.round(targetWidth * subScale));
+            const subH = Math.max(1, Math.round(targetHeight * subScale));
+            const subCanvas = document.createElement("canvas");
+            subCanvas.width = subW;
+            subCanvas.height = subH;
+            const subCtx = subCanvas.getContext("2d", { colorSpace: "srgb" });
+            if (subCtx) {
+              subCtx.imageSmoothingEnabled = true;
+              subCtx.imageSmoothingQuality = "high";
+              subCtx.drawImage(canvas, 0, 0, subW, subH);
+              subCanvas.toBlob(
+                (subBlob) => {
+                  if (subBlob) {
+                    const optimizedFile = new File([subBlob], file.name, {
+                      type: "image/png",
+                      lastModified: Date.now(),
+                    });
+                    return resolve(optimizedFile);
+                  }
+                  return resolve(file);
+                },
+                "image/png"
+              );
+            } else {
+              return resolve(file);
+            }
           },
           "image/png"
         );

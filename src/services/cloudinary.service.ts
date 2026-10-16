@@ -303,7 +303,7 @@ export class CloudinaryService {
         sign_url: true,
         secure: true,
         format: "png",
-        raw_transformation: "e_unsharp_mask:120,cs_srgb,q_auto:best",
+        raw_transformation: "b_transparent,e_unsharp_mask:120,cs_srgb,q_auto:best",
         version: cutoutUpload.version,
       });
 
@@ -434,7 +434,7 @@ export class CloudinaryService {
         sign_url: true,
         secure: true,
         format: "png",
-        raw_transformation: "e_unsharp_mask:120,cs_srgb,q_auto:best",
+        raw_transformation: "b_transparent,e_unsharp_mask:120,cs_srgb,q_auto:best",
         version: cutoutUploadResult.version,
       });
 
@@ -523,7 +523,7 @@ export class CloudinaryService {
 
     const rawTransformation = padPrefix
       ? `${padPrefix}/e_unsharp_mask:120,cs_srgb,q_auto:best`
-      : "e_unsharp_mask:120,cs_srgb,q_auto:best";
+      : "b_transparent,e_unsharp_mask:120,cs_srgb,q_auto:best";
 
     return cloudinary.url(publicId, {
       type: "authenticated",

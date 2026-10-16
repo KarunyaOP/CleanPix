@@ -1,0 +1,7 @@
+{
+  "extraPaths": [
+    "ai-worker",
+    "scratch",
+    "scratch/eval_tests"
+  ]
+}

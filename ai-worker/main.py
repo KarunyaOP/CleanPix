@@ -9,7 +9,6 @@ import traceback
 from contextlib import asynccontextmanager
 import numpy as np
 from PIL import Image
-import scipy.ndimage as ndi
 import onnxruntime as ort
 import psutil
 from fastapi import FastAPI, Request, Response, HTTPException, Header, status, UploadFile, File
@@ -19,16 +18,21 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
+DEFAULT_MODEL_NAME = "isnet-general-use.onnx"
 MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.expanduser("~"), ".cleanpix", "models"))
-MODEL_PATH = os.environ.get("MODEL_PATH", os.path.join(MODEL_DIR, "rmbg-1.4.onnx"))
+MODEL_NAME = os.environ.get("MODEL_NAME", DEFAULT_MODEL_NAME)
+MODEL_PATH = os.environ.get("MODEL_PATH", os.path.join(MODEL_DIR, MODEL_NAME))
 MODEL_URL = os.environ.get(
     "MODEL_URL",
-    "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx"
+    "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx"
+    if "isnet" in MODEL_NAME
+    else "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx"
 )
 API_SECRET = os.environ.get("AI_WORKER_SECRET", "").strip()
 
 _SESSION = None
 _INPUT_NAME = None
+_MODEL_NAME_LOADED = None
 _START_TIME = time.time()
 _INFERENCE_LOCK = asyncio.Lock()
 _PROCESS = psutil.Process(os.getpid())
@@ -40,13 +44,21 @@ def get_memory_mb() -> float:
         return 0.0
 
 def ensure_model():
-    global _SESSION, _INPUT_NAME
+    global _SESSION, _INPUT_NAME, _MODEL_NAME_LOADED
     os.makedirs(MODEL_DIR, exist_ok=True)
+    
+    # Check if target model already exists in ~/.u2net/ as a local cached copy
+    u2net_path = os.path.join(os.path.expanduser("~"), ".u2net", MODEL_NAME)
     if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 100000000:
-        print(f"[AI-WORKER] Downloading BRIA RMBG-1.4 model to {MODEL_PATH} ...", flush=True)
-        t0 = time.time()
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        print(f"[AI-WORKER] Model downloaded in {time.time() - t0:.2f}s ({os.path.getsize(MODEL_PATH)} bytes)", flush=True)
+        if os.path.exists(u2net_path) and os.path.getsize(u2net_path) > 100000000:
+            print(f"[AI-WORKER] Found pre-downloaded {MODEL_NAME} in {u2net_path}, copying to {MODEL_PATH}...", flush=True)
+            import shutil
+            shutil.copyfile(u2net_path, MODEL_PATH)
+        else:
+            print(f"[AI-WORKER] Downloading {MODEL_NAME} to {MODEL_PATH} ...", flush=True)
+            t0 = time.time()
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+            print(f"[AI-WORKER] Model downloaded in {time.time() - t0:.2f}s ({os.path.getsize(MODEL_PATH)} bytes)", flush=True)
     else:
         print(f"[AI-WORKER] Model verified on disk: {MODEL_PATH} ({os.path.getsize(MODEL_PATH)} bytes)", flush=True)
 
@@ -69,7 +81,8 @@ def ensure_model():
 
     _SESSION = ort.InferenceSession(MODEL_PATH, session_opts, providers=providers)
     _INPUT_NAME = _SESSION.get_inputs()[0].name
-    print(f"[AI-WORKER] Session initialized! Providers: {_SESSION.get_providers()}, Input: {_INPUT_NAME} (RSS: {get_memory_mb():.1f} MB)", flush=True)
+    _MODEL_NAME_LOADED = os.path.basename(MODEL_PATH)
+    print(f"[AI-WORKER] Session initialized! Model: {_MODEL_NAME_LOADED}, Providers: {_SESSION.get_providers()}, Input: {_INPUT_NAME} (RSS: {get_memory_mb():.1f} MB)", flush=True)
 
     # Warm-up inference with minimal dummy tensor
     print("[AI-WORKER] Running single warm-up tensor...", flush=True)
@@ -87,8 +100,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CleanPix AI Segmentation Microservice",
-    description="Low-Memory High-Precision Background Removal Microservice using BRIA RMBG 1.4",
-    version="1.0.1",
+    description="Low-Memory High-Precision Universal Background Removal Microservice",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -112,19 +125,25 @@ def verify_auth(x_api_key: str = None, authorization: str = None):
 
 def process_segmentation_low_memory(image_bytes: bytes) -> bytes:
     """
-    High-Precision Low-Memory BRIA RMBG 1.4 Segmentation Pipeline.
+    High-Fidelity Low-Memory Universal Dichotomous Image Segmentation Pipeline.
     
-    1. Decodes original RGB without mutating pixel values.
-    2. Resizes to 1024x1024 RGB and applies official BRIA normalization: (x / 255.0 - 0.5) / 1.0.
-    3. Executes ONNX inference with serialized concurrency and arena-disabled memory management.
-    4. Postprocesses mask:
-       - Min-max normalizes output tensor.
-       - Fills enclosed saliency holes (white faces, character bodies).
-       - Detaches thin radiant background ray bridges via morphological opening.
-       - Discards disconnected low-area noise artifacts.
-       - Restores exact object boundaries and applies sub-pixel antialiased feathering.
-    5. Resizes alpha mask back to original dimensions.
-    6. Losslessly composites alpha channel onto original untouched RGB pixels.
+    1. Preserves original image pixel data and color channels directly (no flattening against black).
+    2. Respects and extracts existing alpha channel if image is already RGBA/transparent.
+    3. Proportional Aspect-Ratio Preserving Letterbox Preprocessing:
+       - Resizes proportionally without aspect-ratio distortion to protect thin arms, fine hair,
+         fingers, clothing edges, and narrow gaps between people.
+       - Center-pads onto a neutral gray (128, 128, 128) 1024x1024 canvas.
+    4. Normalizes input (float32, range [-0.5, 0.5]) and executes low-memory ONNX inference.
+    5. Extracts the exact unpadded region corresponding strictly to the input image dimensions.
+    6. Applies smooth continuous alpha mapping (Hermite smoothstep):
+       - Cleans residual floating-point background noise to ensure transparent pixels are alpha = 0.
+       - Ensures confident foreground pixels achieve full opacity (alpha = 255).
+       - Preserves natural anti-aliased edge gradients, fine hair strands, fingers, and narrow gaps.
+       - NEVER blind-fills enclosed holes or applies destructive morphological opening/erosion.
+    7. Resizes high-precision float mask back to native image dimensions using bilinear interpolation.
+    8. Blends with existing alpha channel: min(predicted_alpha, orig_alpha) to strictly preserve transparent regions.
+    9. Losslessly composites alpha channel onto original untouched RGBA pixels.
+    10. Exports lossless, standard-compliant transparent PNG.
     """
     mem_start = get_memory_mb()
     t0 = time.time()
@@ -135,16 +154,43 @@ def process_segmentation_low_memory(image_bytes: bytes) -> bytes:
     try:
         with Image.open(io.BytesIO(image_bytes)) as pil_img:
             orig_w, orig_h = pil_img.size
-            # 1. Preserve original RGB pixel values
-            orig_rgb = pil_img.convert("RGB")
-            
-            # 2. Resize directly to 1024x1024 RGB for RMBG 1.4 input
-            work = orig_rgb.resize((1024, 1024), Image.Resampling.BILINEAR)
 
-            # 3. Official BRIA RMBG 1.4 Preprocessing: float32, range [-0.5, 0.5]
-            arr = np.array(work, dtype=np.float32)
+            # 1. Inspect existing alpha channel if present
+            has_alpha = (
+                pil_img.mode in ("RGBA", "LA")
+                or (pil_img.mode == "P" and "transparency" in pil_img.info)
+            )
+            if has_alpha:
+                orig_rgba = pil_img.convert("RGBA")
+                orig_alpha = np.array(orig_rgba.split()[-1])
+                # Composite over neutral gray (128, 128, 128) for neural input
+                rgb_input = Image.new("RGB", (orig_w, orig_h), (128, 128, 128))
+                rgb_input.paste(orig_rgba, mask=orig_rgba.split()[-1])
+            else:
+                orig_rgba = pil_img.convert("RGBA")
+                orig_alpha = None
+                rgb_input = pil_img.convert("RGB")
+
+            # 2. Aspect-Ratio Preserving Proportional Letterbox Preprocessing
+            target_size = 1024
+            scale = min(target_size / orig_w, target_size / orig_h)
+            nw = max(1, int(round(orig_w * scale)))
+            nh = max(1, int(round(orig_h * scale)))
+
+            scaled = rgb_input.resize((nw, nh), Image.Resampling.BILINEAR)
+            del rgb_input
+
+            pad_left = (target_size - nw) // 2
+            pad_top = (target_size - nh) // 2
+
+            canvas = Image.new("RGB", (target_size, target_size), (128, 128, 128))
+            canvas.paste(scaled, (pad_left, pad_top))
+            del scaled
+
+            # 3. Model Preprocessing: float32, range [-0.5, 0.5]
+            arr = np.array(canvas, dtype=np.float32)
             tensor = np.transpose((arr / 255.0 - 0.5) / 1.0, (2, 0, 1))[np.newaxis, :, :, :].astype(np.float32)
-            del work, arr
+            del canvas, arr
 
             t_in_min, t_in_max, t_in_mean = float(tensor.min()), float(tensor.max()), float(tensor.mean())
 
@@ -154,73 +200,63 @@ def process_segmentation_low_memory(image_bytes: bytes) -> bytes:
             inf_ms = round((time.time() - t_inf_start) * 1000, 1)
             del tensor
 
-            raw_mask = outputs[0][0, 0] # (1024, 1024)
+            raw_out = outputs[0][0, 0] # (1024, 1024)
             del outputs
 
-            t_out_min, t_out_max, t_out_mean = float(raw_mask.min()), float(raw_mask.max()), float(raw_mask.mean())
+            # 5. Extract exact unpadded region corresponding to the un-distorted image
+            unpadded_mask = raw_out[pad_top : pad_top + nh, pad_left : pad_left + nw]
+            del raw_out
 
-            # 5. Min-max normalization
-            mi = float(np.min(raw_mask))
-            ma = float(np.max(raw_mask))
+            t_out_min, t_out_max, t_out_mean = float(unpadded_mask.min()), float(unpadded_mask.max()), float(unpadded_mask.mean())
+
+            # 6. Dynamic Calibration
+            mi = float(np.min(unpadded_mask))
+            ma = float(np.max(unpadded_mask))
             if ma > mi:
-                norm_mask = (raw_mask - mi) / (ma - mi)
+                norm_mask = (unpadded_mask - mi) / (ma - mi)
             else:
-                norm_mask = raw_mask
-            del raw_mask
+                norm_mask = unpadded_mask
+            del unpadded_mask
 
-            # 6. Advanced Quality Postprocessing:
-            # Step A: Binarize confident foreground
-            fg_bin = norm_mask > 0.50
-            struct = ndi.generate_binary_structure(2, 2)
-            
-            # Step B: Fill enclosed interior holes (white faces, character bodies, clothes)
-            fg_filled = ndi.binary_fill_holes(fg_bin)
-            
-            # Step C: Detach thin background ray bridges via morphological opening
-            fg_opened = ndi.binary_opening(fg_filled, structure=struct, iterations=5)
-            
-            # Step D: Remove disconnected small background noise components
-            labeled, num_features = ndi.label(fg_opened)
-            if num_features > 1:
-                sizes = ndi.sum(fg_opened, labeled, range(1, num_features + 1))
-                max_size = np.max(sizes)
-                min_pixels = max(300, int(max_size * 0.005))
-                valid_components = np.where(sizes >= min_pixels)[0] + 1
-                fg_clean = np.isin(labeled, valid_components)
-            else:
-                fg_clean = fg_opened
-                
-            # Step E: Restore exact character boundaries from filled foreground
-            fg_restored = ndi.binary_dilation(fg_clean, structure=struct, iterations=5) & fg_filled
-            
-            # Step F: Smooth antialiased feather zone along real subject edges
-            fg_dilated = ndi.binary_dilation(fg_restored, structure=struct, iterations=2)
-            
-            final_mask_1024 = np.zeros_like(norm_mask)
-            final_mask_1024[fg_restored] = 1.0
-            edge_zone = fg_dilated & (~fg_restored)
-            final_mask_1024[edge_zone] = np.clip(norm_mask[edge_zone], 0.0, 1.0)
-            final_mask_1024 = ndi.gaussian_filter(final_mask_1024, sigma=0.5)
-            final_mask_1024 = np.clip(final_mask_1024, 0.0, 1.0)
-            del norm_mask, fg_bin, fg_filled, fg_opened, fg_clean, fg_restored, fg_dilated, edge_zone
+            # 7. High-fidelity matting post-processing:
+            # Map background floor (< 0.03) smoothly to 0.0 without residual float noise.
+            # Confident foreground (> 0.95) achieves full opacity (alpha = 255).
+            # Smoothstep S-curve: S(t) = t * t * (3.0 - 2.0 * t) ensures C1-continuous gradients.
+            # Preserves delicate hair strands, fingers, clothing borders, and narrow gaps between people.
+            # NEVER blind-fills enclosed holes or applies destructive morphological opening/erosion.
+            t = np.clip((norm_mask - 0.03) / (0.95 - 0.03), 0.0, 1.0)
+            clean_mask = (t * t * (3.0 - 2.0 * t)).astype(np.float32)
+            del norm_mask, t
 
-            # Step G: Resize alpha mask back to ORIGINAL image dimensions using Bilinear interpolation
-            alpha_mask = Image.fromarray((final_mask_1024 * 255.0).astype(np.uint8), mode="L").resize(
+            # 8. Resize continuous float mask back to ORIGINAL image dimensions using Bilinear interpolation
+            mask_img = Image.fromarray(clean_mask, mode="F").resize(
                 (orig_w, orig_h),
                 Image.Resampling.BILINEAR
             )
-            del final_mask_1024
+            del clean_mask
 
-            mask_min, mask_max, mask_mean = alpha_mask.getextrema()[0], alpha_mask.getextrema()[1], float(np.mean(alpha_mask))
+            final_alpha = (np.array(mask_img) * 255.0).round().clip(0, 255).astype(np.uint8)
+            del mask_img
 
-            # 7. Lossless Alpha Compositing:
-            # Original RGB image remains 100% untouched.
-            # Only the alpha channel is replaced by the generated mask.
-            rgba_img = orig_rgb.copy()
-            rgba_img.putalpha(alpha_mask)
-            del orig_rgb, alpha_mask
+            # 9. If original image had an alpha channel, guarantee existing transparency is preserved
+            if orig_alpha is not None:
+                final_alpha = np.minimum(final_alpha, orig_alpha)
+                del orig_alpha
 
-            # 8. Export to PNG buffer
+            mask_min = int(final_alpha.min())
+            mask_max = int(final_alpha.max())
+            mask_mean = float(np.mean(final_alpha))
+
+            # 10. Lossless Alpha Compositing:
+            # Original RGBA pixel values are 100% preserved (never converted to black RGB).
+            alpha_channel = Image.fromarray(final_alpha, mode="L")
+            del final_alpha
+
+            rgba_img = orig_rgba.copy()
+            rgba_img.putalpha(alpha_channel)
+            del orig_rgba, alpha_channel
+
+            # 11. Export to PNG buffer
             out_io = io.BytesIO()
             rgba_img.save(out_io, format="PNG", optimize=False)
             del rgba_img
@@ -257,7 +293,7 @@ def health():
     return {
         "status": "ok",
         "service": "CleanPix AI Segmentation Worker",
-        "model": "BRIA RMBG 1.4",
+        "model": _MODEL_NAME_LOADED or "isnet-general-use",
         "model_loaded": _SESSION is not None,
         "providers": _SESSION.get_providers() if _SESSION else [],
         "resident_memory_mb": round(get_memory_mb(), 1),
@@ -294,7 +330,7 @@ async def remove_background(
         media_type="image/png",
         headers={
             "X-Processing-Time-Ms": str(elapsed_ms),
-            "X-Model-Used": "BRIA-RMBG-1.4",
+            "X-Model-Used": _MODEL_NAME_LOADED or "isnet-general-use",
             "X-Worker-Memory-Mb": str(round(get_memory_mb(), 1))
         }
     )

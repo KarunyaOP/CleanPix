@@ -5,7 +5,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
     MODEL_DIR=/app/models \
-    MODEL_PATH=/app/models/rmbg-1.4.onnx
+    MODEL_NAME=isnet-general-use.onnx \
+    MODEL_PATH=/app/models/isnet-general-use.onnx
 
 WORKDIR /app
 
@@ -18,9 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the BRIA RMBG 1.4 model during Docker build for instant cold starts
+# Pre-download the IS-Net General Use model during Docker build for instant cold starts
 RUN mkdir -p /app/models && \
-    curl -L "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx" -o /app/models/rmbg-1.4.onnx
+    curl -L "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx" -o /app/models/isnet-general-use.onnx
 
 # Copy application source code
 COPY main.py .
